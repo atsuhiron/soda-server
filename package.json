@@ -1,0 +1,12 @@
+{
+  "name": "soda-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "炭酸飲料をなるべく速く、こぼさずにコップへ注ぐブラウザゲーム(物理シミュレーション付き)",
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "node tools/serve.js 8080",
+    "test": "node --test",
+    "calibrate": "node tools/calibrate.js"
+  }
+}
