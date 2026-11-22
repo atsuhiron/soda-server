@@ -1,0 +1,52 @@
+# v で始まるタグ(例: v0.1.0)が push されたら、テストを通してから GitHub Pages に公開する
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 公開は同時に 1 つだけ。途中の公開は打ち切らない
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 単体テスト
+        run: npm test
+
+      # 遊ぶのに必要なファイルだけを公開する(テスト・ツール・設定は含めない)
+      - name: 公開するファイルをまとめる
+        run: |
+          mkdir _site
+          cp -r index.html css js _site/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
