@@ -57,6 +57,21 @@ npm run calibrate   # 決まった注ぎ方を自動で実行し、タイム・�
 
 `CAL='{"plumeCoef":0.4}' npm run calibrate` のように校正パラメータを一時的に上書きして比較できます。
 
+### CI とリリース
+
+- **PR ごと**(`.github/workflows/ci.yml`): 全 JS ファイルの構文チェックと `npm test`。
+- **`v` で始まるタグの push**(`.github/workflows/release.yml`): `npm test` が通れば、`index.html`・`css/`・`js/` だけを GitHub Pages に公開します。
+
+```
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+初回だけ GitHub のリポジトリ設定が必要です。
+
+1. Settings → Pages → Build and deployment の Source を **GitHub Actions** にする
+2. Settings → Environments → `github-pages` → Deployment branches and tags に **タグのルール `v*`** を追加する(初期状態では既定ブランチからしか公開できず、タグからの公開が拒否されるため)
+
 | ファイル | 役割 |
 |---|---|
 | `js/physics.js` | 物理エンジンとゲーム進行(DOM 非依存。ブラウザでも Node でも動く) |
