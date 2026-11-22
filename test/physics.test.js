@@ -121,3 +121,13 @@ test('ゲーム: 目標量に届けば記録が出て、ボトルが空なら失
   const fail = runPour({ targetPct: 98 }, { q: 1, mouth: 0.15 });
   assert.equal(fail.state, 'failed');
 });
+
+test('水(練習用): CO₂ がなく、まっすぐ全開で注いでもあふれない', () => {
+  const water = runPour({ drink: 'water' }, { q: 1 });
+  const cola = runPour({ drink: 'cola' }, { q: 1 });
+  assert.equal(water.state, 'done');
+  assert.equal(water.game.sim.co2Budget().total0, 0);
+  assert.ok(Number.isFinite(water.record), `記録 ${water.record}`);
+  assert.ok(water.spill < 1, `水のこぼれ ${water.spill}`);
+  assert.ok(water.foamMax < cola.foamMax / 3, `泡 水 ${water.foamMax} / コーラ ${cola.foamMax}`);
+});

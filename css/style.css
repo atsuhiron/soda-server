@@ -372,6 +372,35 @@ body {
   color: var(--danger);
 }
 
+.tutorial {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.tutorial[hidden] {
+  display: none;
+}
+.tutorial h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+.tutorial ol {
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 4px;
+}
+.tutorial b {
+  color: var(--text-primary);
+}
+.tutorial-next {
+  margin-top: 10px;
+}
 .charts {
   position: relative;
   display: grid;
