@@ -158,6 +158,11 @@
   // gv: ガスボリューム, life: 泡の寿命 1/k_c [s], drain: 排液時定数 [s], sigma: 表面張力(25℃) [N/m]
   // mu: 粘度倍率(水比), salt: 塩析係数, dome: 縁から盛り上がれる泡の高さ [m], phiIn: 生まれたての泡のガス体積率
   const DRINKS = {
+    // 操作の練習用。CO₂ を含まないので、泡は巻き込んだ空気だけで、液面ですぐ割れる。
+    water: {
+      name: '水(練習用)', gv: 0, life: 0.5, drain: 0.3, sigma: 0.072, mu: 1.0, salt: 1.0, rho: 1000,
+      dome: 0.0005, phiIn: 0.72, color: [186, 214, 236], alpha: 0.24, foam: [250, 253, 255], tutorial: true,
+    },
     soda: {
       name: '炭酸水', gv: 3.8, life: 1.5, drain: 0.6, sigma: 0.072, mu: 1.0, salt: 1.0, rho: 1000,
       dome: 0.001, phiIn: 0.72, color: [196, 226, 238], alpha: 0.3, foam: [250, 253, 255],

@@ -56,7 +56,7 @@
           <div class="guide guide-y" aria-hidden="true">↑ 勢いよく注ぐ</div>
 
           <div class="hint" id="hint">
-            <p><b>押したまま</b>上へ動かすと注ぎ始めます</p>
+            <p><b>上にドラッグすると</b>注ぎ始めます</p>
             <p class="sub">左右でグラスを傾け、壁を伝わせると泡が減ります</p>
           </div>
 
@@ -75,6 +75,19 @@
             </div>
           </div>
         </div>
+
+        <section class="tutorial" id="tutorial" aria-labelledby="tutorialTitle" hidden>
+          <h2 id="tutorialTitle">水で操作に慣れましょう</h2>
+          <ol>
+            <li><b>上にドラッグすると</b>ボトルが傾いて注ぎ始めます。下へ戻すと弱まります。</li>
+            <li><b>右にドラッグすると</b>グラスがボトル側へ傾きます。</li>
+            <li><b>ホイール</b>(または右の「注ぎ口の高さ」)で注ぎ口を上げ下げします。</li>
+            <li>液が<b>目標線</b>に届いた時点でタイムが決まります。指を離すとボトルもグラスも元に戻ります。こぼした液は 1 mL ごとに 0.5 秒の加算です。</li>
+          </ol>
+          <div class="tutorial-next">
+            <button type="button" class="btn primary small" id="tryCola">コーラに挑戦</button>
+          </div>
+        </section>
 
         <div class="charts">
           <figure class="chart">
@@ -130,7 +143,7 @@
             <summary>詳しいパラメータ</summary>
             <label class="field">
               <span>ガスボリューム <output id="gvOut"></output></span>
-              <input type="range" id="gv" min="1.5" max="7" step="0.1" />
+              <input type="range" id="gv" min="0" max="7" step="0.1" />
             </label>
             <label class="field">
               <span>泡の寿命 1/k<sub>c</sub> <output id="foamLifeOut"></output></span>

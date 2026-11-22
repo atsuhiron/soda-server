@@ -11,6 +11,27 @@
   const $ = (id) => document.getElementById(id);
   const clamp = P.clamp;
 
+  // ---------- 保存(このブラウザだけ) ----------
+  const store = {
+    get(k, d) {
+      try {
+        const v = localStorage.getItem(k);
+        return v ? JSON.parse(v) : d;
+      } catch (e) {
+        return d;
+      }
+    },
+    set(k, v) {
+      try {
+        localStorage.setItem(k, JSON.stringify(v));
+      } catch (e) {
+        /* 保存できない環境では記録を残さない */
+      }
+    },
+  };
+  const BEST_KEY = 'soda-server.best.v1';
+  const RECENT_KEY = 'soda-server.recent.v1';
+
   // ---------- 設定フォーム ----------
   const fillSelect = (el, obj) => {
     el.innerHTML = Object.entries(obj)
@@ -20,7 +41,9 @@
   fillSelect($('drink'), P.DRINKS);
   fillSelect($('glass'), P.GLASSES);
   fillSelect($('surface'), P.SURFACES);
-  $('drink').value = P.DEFAULT_SETTINGS.drink;
+  // 記録が 1 件もないブラウザ(初めて遊ぶ人)は、操作の練習用の水から始める
+  const firstVisit = !Object.keys(store.get(BEST_KEY, {})).length && !store.get(RECENT_KEY, []).length;
+  $('drink').value = firstVisit ? 'water' : P.DEFAULT_SETTINGS.drink;
   $('glass').value = P.DEFAULT_SETTINGS.glass;
   $('surface').value = P.DEFAULT_SETTINGS.surface;
 
@@ -69,11 +92,16 @@
     $('entrainOut').textContent = `× ${s.entrain.toFixed(2)}`;
     const ceq = P.solubilityGL(s.liquidTemp) * sim.drink.salt;
     const cl = s.gv * P.GV_GL;
+    const gas =
+      s.gv > 0
+        ? `<div>溶けている CO₂ <b>${cl.toFixed(1)} g/L</b> ・ 溶けていられる量 <b>${ceq.toFixed(2)} g/L</b></div>` +
+          `<div>過飽和度 S = <b>${(cl / ceq - 1).toFixed(2)}</b>(液温で決まる)</div>`
+        : '<div>CO₂ は溶けていません(泡は巻き込んだ空気だけ)</div>';
     $('facts').innerHTML =
       `<div>グラス容量 <b>${Math.round(sim.glass.volume * 1e6)} mL</b> ・ 目標 <b>${Math.round(sim.targetVolume * 1e6)} mL</b></div>` +
-      `<div>溶けている CO₂ <b>${cl.toFixed(1)} g/L</b> ・ 溶けていられる量 <b>${ceq.toFixed(2)} g/L</b></div>` +
-      `<div>過飽和度 S = <b>${(cl / ceq - 1).toFixed(2)}</b>(液温で決まる)</div>` +
+      gas +
       `<div>泡の寿命 <b>${s.foamLife} 秒</b> ・ サイト <b>${s.siteDensity} 個/cm²</b></div>`;
+    $('tutorial').hidden = !sim.drink.tutorial;
   }
 
   // ---------- ゲーム本体 ----------
@@ -111,6 +139,11 @@
     $(id).addEventListener('input', () => updateOutputs(readSettings(), game.sim));
     $(id).addEventListener('change', reconfigure);
   }
+  $('tryCola').addEventListener('click', () => {
+    $('drink').value = 'cola';
+    presetAdvanced();
+    reconfigure();
+  });
   $('resetAdvanced').addEventListener('click', () => {
     presetAdvanced();
     reconfigure();
@@ -203,26 +236,7 @@
     return { bottleTilt, glassTilt: P.MAX_GLASS_TILT * gx, mouthHeight: input.mouth };
   }
 
-  // ---------- 記録(このブラウザだけに保存) ----------
-  const store = {
-    get(k, d) {
-      try {
-        const v = localStorage.getItem(k);
-        return v ? JSON.parse(v) : d;
-      } catch (e) {
-        return d;
-      }
-    },
-    set(k, v) {
-      try {
-        localStorage.setItem(k, JSON.stringify(v));
-      } catch (e) {
-        /* 保存できない環境では記録を残さない */
-      }
-    },
-  };
-  const BEST_KEY = 'soda-server.best.v1';
-  const RECENT_KEY = 'soda-server.recent.v1';
+  // ---------- 記録 ----------
   const settingsKey = (s) => JSON.stringify(Object.keys(s).sort().map((k) => [k, s[k]]));
   const label = (s) => `${P.DRINKS[s.drink].name} ${s.liquidTemp}℃・${P.GLASSES[s.glass].name}${s.ice ? `・氷${s.ice}` : ''}`;
   function showRecords() {
@@ -292,7 +306,7 @@
     $('hudQ').textContent = Math.round(st.Q * 1e6);
     $('hudV').textContent = st.impactV ? `${st.impactV.toFixed(2)} m/s` : '—';
     $('hudMode').textContent = st.impactMode ? `(${MODE[st.impactMode]})` : '';
-    $('hudS').textContent = st.S.toFixed(2);
+    $('hudS').textContent = sim.gv > 0 ? st.S.toFixed(2) : '—';
     $('hudTL').textContent = st.TL.toFixed(1);
     $('hudTg').textContent = st.Tg.toFixed(1);
     $('hudBottle').textContent = Math.round(st.bottle * 1e6);
