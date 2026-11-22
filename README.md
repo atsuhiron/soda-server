@@ -62,15 +62,9 @@ npm run calibrate   # 決まった注ぎ方を自動で実行し、タイム・�
 - **PR ごと**(`.github/workflows/ci.yml`): 全 JS ファイルの構文チェックと `npm test`。
 - **`v` で始まるタグの push**(`.github/workflows/release.yml`): `npm test` が通れば、`index.html`・`css/`・`js/` だけを GitHub Pages に公開します。
 
-```
-git tag v0.1.0
-git push origin v0.1.0
-```
+タグを付ける前に CHANGELOG.md や package.json のバージョンをそろえる必要があるので、公開は [RELEASING.md](RELEASING.md) の手順で行います(初回に必要な GitHub の設定も載せています)。変更履歴は [CHANGELOG.md](CHANGELOG.md) にあります。
 
-初回だけ GitHub のリポジトリ設定が必要です。
-
-1. Settings → Pages → Build and deployment の Source を **GitHub Actions** にする
-2. Settings → Environments → `github-pages` → Deployment branches and tags に **タグのルール `v*`** を追加する(初期状態では既定ブランチからしか公開できず、タグからの公開が拒否されるため)
+### ファイル構成
 
 | ファイル | 役割 |
 |---|---|
