@@ -6,6 +6,10 @@
 
 ## [未リリース]
 
+## [0.1.0] - 2026-11-22
+
+最初の公開版。
+
 ### 追加
 
 - 炭酸飲料をなるべく速く、こぼさずにコップへ注ぐブラウザゲーム。泡の挙動は `soda_foam_physics_report.md` の §9 L1 モデル(CO₂ 収支・気泡集団・泡層 ODE)で計算する (#1)
@@ -13,5 +17,7 @@
 - 物理エンジンの単体テスト、校正スクリプト `npm run calibrate`、静的サーバー `npm start` (#1)
 - PR ごとに全 JS ファイルの構文チェックと単体テストを実行する CI (#2)
 - `v*` タグの push で GitHub Pages に公開するワークフロー (#2)
+- 変更履歴(この CHANGELOG.md)とリリース手順 RELEASING.md (#3)
 
-[未リリース]: https://github.com/atsuhiron/soda-server/commits/main
+[未リリース]: https://github.com/atsuhiron/soda-server/compare/v0.1.0...main
+[0.1.0]: https://github.com/atsuhiron/soda-server/releases/tag/v0.1.0
