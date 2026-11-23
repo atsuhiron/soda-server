@@ -453,11 +453,6 @@ body {
   color: var(--text-secondary);
   margin: 0 0 4px 4px;
 }
-.chart .unit {
-  font-weight: 400;
-  color: var(--text-muted);
-  margin-left: 4px;
-}
 .chart canvas {
   display: block;
   width: 100%;

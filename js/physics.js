@@ -1642,6 +1642,8 @@
       this.result = null;
       this.history = [];
       this.histClock = 0;
+      this.foamPrev = 0; // 前回記録したときの泡の体積 [m³]
+      this.foamRate = 0; // 泡の体積の増減 [m³/s](ならした値)
       this.acc = 0;
       this.foamMax = 0;
       this.vfClock = 0;
@@ -1701,12 +1703,17 @@
       // 記録グラフは注ぎ始めから結果が出た 2 秒後まで
       const recording = this.state !== 'ready' && (this.afterTime || 0) < 2;
       if (recording && this.histClock >= 0.05 && this.history.length < 2400) {
-        this.histClock = 0;
         const V1 = sim.VL + sim.Vhold + sim.Vice;
+        // 泡の体積の増減。壊れたり縁からあふれたりすると負になる。間隔ごとの差分はぎざつくので軽くならす
+        const foamV = sim.foamVolume();
+        this.foamRate += 0.5 * ((foamV - this.foamPrev) / this.histClock - this.foamRate);
+        this.foamPrev = foamV;
+        this.histClock = 0;
         this.history.push({
           t: this.clock,
           liquid: sim.VL,
-          total: V1 + sim.foamVolume(),
+          total: V1 + foamV,
+          foamRate: this.foamRate,
           cap: sim.Vrim,
           q: sim.Q,
           spill: sim.spilledLiquid,
