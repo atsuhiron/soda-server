@@ -157,30 +157,31 @@
   // ===== プリセット =====
   // gv: ガスボリューム, life: 泡の寿命 1/k_c [s], drain: 排液時定数 [s], sigma: 表面張力(25℃) [N/m]
   // mu: 粘度倍率(水比), salt: 塩析係数, dome: 縁から盛り上がれる泡の高さ [m], phiIn: 生まれたての泡のガス体積率
+  // label: ボトルのラベルに書く名前, bottle: ボトルの見た目(render.js の BOTTLE_LOOKS。省略時は PET)
   const DRINKS = {
     // 操作の練習用。CO₂ を含まないので、泡は巻き込んだ空気だけで、液面ですぐ割れる。
     water: {
-      name: '水(練習用)', gv: 0, life: 0.5, drain: 0.3, sigma: 0.072, mu: 1.0, salt: 1.0, rho: 1000,
+      name: '水(練習用)', label: 'WATER', bottle: 'water', gv: 0, life: 0.5, drain: 0.3, sigma: 0.072, mu: 1.0, salt: 1.0, rho: 1000,
       dome: 0.0005, phiIn: 0.72, color: [186, 214, 236], alpha: 0.24, foam: [250, 253, 255], tutorial: true,
     },
     soda: {
-      name: '炭酸水', gv: 3.8, life: 1.5, drain: 0.6, sigma: 0.072, mu: 1.0, salt: 1.0, rho: 1000,
+      name: '炭酸水', label: 'SODA', bottle: 'soda', gv: 3.8, life: 1.5, drain: 0.6, sigma: 0.072, mu: 1.0, salt: 1.0, rho: 1000,
       dome: 0.001, phiIn: 0.72, color: [196, 226, 238], alpha: 0.3, foam: [250, 253, 255],
     },
     cola: {
-      name: 'コーラ', gv: 3.5, life: 12, drain: 2.5, sigma: 0.065, mu: 1.25, salt: 0.95, rho: 1040,
+      name: 'コーラ', label: 'COLA', bottle: 'cola', gv: 3.5, life: 12, drain: 2.5, sigma: 0.065, mu: 1.25, salt: 0.95, rho: 1040,
       dome: 0.002, phiIn: 0.7, color: [62, 26, 12], alpha: 0.94, foam: [226, 200, 166],
     },
     cider: {
-      name: 'サイダー', gv: 3.0, life: 5, drain: 1.5, sigma: 0.068, mu: 1.2, salt: 0.95, rho: 1040,
+      name: 'サイダー', label: 'CIDER', bottle: 'cider', gv: 3.0, life: 5, drain: 1.5, sigma: 0.068, mu: 1.2, salt: 0.95, rho: 1040,
       dome: 0.0015, phiIn: 0.7, color: [226, 238, 226], alpha: 0.32, foam: [252, 255, 252],
     },
     beer: {
-      name: 'ビール', gv: 2.6, life: 180, drain: 20, sigma: 0.044, mu: 1.6, salt: 0.97, rho: 1010,
+      name: 'ビール', label: 'BEER', bottle: 'beer', gv: 2.6, life: 180, drain: 20, sigma: 0.044, mu: 1.6, salt: 0.97, rho: 1010,
       dome: 0.008, phiIn: 0.68, color: [218, 146, 36], alpha: 0.86, foam: [251, 246, 230],
     },
     champagne: {
-      name: 'シャンパン', gv: 6.0, life: 8, drain: 2.0, sigma: 0.048, mu: 1.5, salt: 0.92, rho: 995,
+      name: 'シャンパン', label: 'CHAMPAGNE', bottle: 'champagne', gv: 6.0, life: 8, drain: 2.0, sigma: 0.048, mu: 1.5, salt: 0.92, rho: 995,
       dome: 0.001, phiIn: 0.72, color: [240, 224, 160], alpha: 0.45, foam: [255, 253, 244],
     },
   };
