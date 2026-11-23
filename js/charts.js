@@ -17,11 +17,24 @@
     return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
   }
 
+  // lo〜hi を含み、両端がちょうど目盛りに乗る範囲と目盛り間隔。
+  // 1・2・5 × 10ⁿ の間隔のうち、目盛りの区間が maxDiv 個以下に収まる一番細かいものを選ぶ
+  function niceRange(lo, hi, maxDiv) {
+    for (let p = 1; ; p *= 10) {
+      for (const m of [1, 2, 5]) {
+        const step = m * p;
+        const a = Math.floor(lo / step + 1e-9) * step;
+        const b = Math.ceil(hi / step - 1e-9) * step;
+        if ((b - a) / step <= maxDiv + 1e-9) return [a, b, step];
+      }
+    }
+  }
+
   class LineChart {
     constructor(canvas, opts) {
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
-      this.opts = opts; // { series: [{key, label, color, area}], refs: [{key, label, dash}], yMax, unit }
+      this.opts = opts; // { series: [{key, label, color, area}], refs: [{key, label, dash}], yMin(省略時 0), yMax, yStep(縦軸の目盛り間隔。省略時は自動), unit(縦軸の単位) }
       this.hoverT = null;
     }
     resize() {
@@ -35,7 +48,7 @@
     layout(tMax) {
       const padL = 40;
       const padR = 44;
-      const padT = 8;
+      const padT = 22; // 縦軸の単位を一番上の目盛りの上に置く分
       const padB = 20;
       this.box = { x0: padL, x1: this.W - padR, y0: padT, y1: this.H - padB };
       this.tMax = tMax;
@@ -44,7 +57,8 @@
       return this.box.x0 + ((this.box.x1 - this.box.x0) * t) / this.tMax;
     }
     ty(v) {
-      return this.box.y1 - ((this.box.y1 - this.box.y0) * v) / this.opts.yMax;
+      const lo = this.opts.yMin || 0;
+      return this.box.y1 - ((this.box.y1 - this.box.y0) * (v - lo)) / (this.opts.yMax - lo);
     }
     draw(hist, tMax, colors) {
       const c = this.ctx;
@@ -60,19 +74,27 @@
       c.lineWidth = 1;
       c.textAlign = 'right';
       c.textBaseline = 'middle';
-      const ys = niceStep(o.yMax, 3);
-      for (let v = 0; v <= o.yMax + 1e-9; v += ys) {
+      const lo = o.yMin || 0;
+      const ys = o.yStep || niceStep(o.yMax - lo, 3);
+      for (let v = Math.ceil(lo / ys - 1e-9) * ys; v <= o.yMax + 1e-9; v += ys) {
         const y = Math.round(this.ty(v)) + 0.5;
+        // 負の値があるときは 0 の線を少し濃くして、増減の境目をわかりやすくする
+        c.strokeStyle = lo < 0 && Math.abs(v) < 1e-9 ? colors.muted : colors.grid;
         c.beginPath();
         c.moveTo(b.x0, y);
         c.lineTo(b.x1, y);
         c.stroke();
         c.fillText(String(Math.round(v)), b.x0 - 6, y);
       }
+      // 単位: 縦軸は一番上の目盛りの上、横軸は目盛りの列の右端
+      c.textBaseline = 'bottom';
+      c.fillText(o.unit, b.x0 - 6, b.y0 - 6);
       c.textAlign = 'center';
       c.textBaseline = 'top';
       const xs = niceStep(tMax, 6);
-      for (let t = 0; t <= tMax + 1e-9; t += xs) c.fillText(`${Math.round(t)}s`, this.tx(t), b.y1 + 5);
+      for (let t = 0; t <= tMax + 1e-9; t += xs) c.fillText(String(Math.round(t)), this.tx(t), b.y1 + 5);
+      c.textAlign = 'left';
+      c.fillText('s', b.x1 + 12, b.y1 + 5);
       if (!hist.length) return;
       // 基準線(縁の容量・目標)
       for (const r of o.refs || []) {
@@ -178,6 +200,11 @@
     return Math.abs(hist[lo].t - t) < Math.abs(hist[hi].t - t) ? hist[lo] : hist[hi];
   }
 
+  // 流量グラフの縦軸の初期範囲 [mL/s]。泡は壊れると減るので負の側も最初から見せる。
+  // はみ出したら、両端が目盛りに乗るように広げる
+  const FLOW_MIN = -20;
+  const FLOW_MAX = 100;
+
   class HistoryCharts {
     constructor(volCanvas, flowCanvas, tooltip) {
       const ml = (k) => (h) => h[k] * 1e6;
@@ -188,11 +215,18 @@
         ],
         refs: [{ label: '縁', dash: [5, 4], get: ml('cap') }],
         yMax: 400,
+        unit: 'mL',
       });
       this.flow = new LineChart(flowCanvas, {
-        series: [{ key: 'q', label: '流量', color: 's3', area: true, get: ml('q') }],
+        series: [
+          { key: 'q', label: '流量', color: 's3', area: true, get: ml('q') },
+          { key: 'foamRate', label: '泡の増減', color: 's2', get: ml('foamRate') },
+        ],
         refs: [],
-        yMax: 150,
+        yMin: FLOW_MIN,
+        yMax: FLOW_MAX,
+        yStep: 20,
+        unit: 'mL/s',
       });
       this.tooltip = tooltip;
       this.hist = [];
@@ -237,6 +271,7 @@
         `<div><span class="key s2"></span>液体+泡 <b>${(h.total * 1e6).toFixed(0)} mL</b></div>` +
         `<div><span class="key ref"></span>縁まで <b>${(h.cap * 1e6).toFixed(0)} mL</b></div>` +
         `<div><span class="key s3"></span>流量 <b>${(h.q * 1e6).toFixed(0)} mL/s</b></div>` +
+        `<div><span class="key s2"></span>泡の増減 <b>${h.foamRate >= 0 ? '+' : '−'}${Math.abs(h.foamRate * 1e6).toFixed(0)} mL/s</b></div>` +
         `<div>こぼれ <b>${(h.spill * 1e6).toFixed(1)} mL</b></div>`;
       tip.hidden = false;
       const host = tip.offsetParent || document.body;
@@ -271,6 +306,14 @@
       c.textBaseline = 'bottom';
       c.font = '11px system-ui, sans-serif';
       c.fillText('目標', this.vol.box.x0 + 4, y - 2);
+      let lo = 0;
+      let hi = 0;
+      for (const h of hist) {
+        lo = Math.min(lo, h.q, h.foamRate);
+        hi = Math.max(hi, h.q, h.foamRate);
+      }
+      const fo = this.flow.opts;
+      [fo.yMin, fo.yMax, fo.yStep] = niceRange(Math.min(FLOW_MIN, lo * 1e6), Math.max(FLOW_MAX, hi * 1e6), 7);
       this.flow.draw(hist, tMax, colors);
     }
   }

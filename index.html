@@ -10,68 +10,84 @@
   <body>
     <header class="topbar">
       <div class="brand">
-        <h1>Soda Server</h1>
+        <div class="brand-line">
+          <h1>Soda Server</h1>
+          <!-- 「開発版」は公開時に release.yml がタグ名(v0.1.0 など)に置き換える。目印のコメントは消さない -->
+          <span class="version"><!--VERSION-->開発版<!--/VERSION--></span>
+          <a class="changelog" href="https://github.com/atsuhiron/soda-server/blob/main/CHANGELOG.md">変更履歴<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5h5v5M9.5 2.5 3 9" /></svg></a>
+        </div>
         <p>炭酸を、なるべく速く、こぼさずに。</p>
       </div>
-      <button type="button" class="btn ghost" id="helpBtn" aria-expanded="false" aria-controls="helpPanel">遊び方</button>
+      <nav class="top-actions">
+        <button type="button" class="btn ghost" id="helpBtn" aria-haspopup="dialog" aria-controls="helpPanel">遊び方</button>
+        <a class="btn ghost" href="physics.html">物理モデル</a>
+      </nav>
     </header>
 
-    <section class="help" id="helpPanel" hidden>
-      <ul>
-        <li><b>押したまま(ドラッグ)</b>でボトルとグラスを持ちます。離すと両方とも元に戻ります。</li>
-        <li><b>上下</b>: ボトルの傾き(上ほど勢いよく注ぐ)。<b>左右</b>: グラスの傾き(右ほどボトル側へ傾く)。</li>
-        <li><b>ホイール</b>(または右のスライダー): 注ぎ口の高さ。高いほど液柱が速く突っ込み、空気を巻き込みます。</li>
-        <li>液体が<b>目標線</b>に届いた時点でタイム確定。泡が落ち着くまで見届けて、こぼれた量を集計します。</li>
-        <li>記録 = タイム + こぼした液 1 mL ごとに <b>0.5 秒</b>。キーボード: R でやり直し、Space で押したまま、矢印で操作。</li>
-      </ul>
-    </section>
+    <dialog class="help" id="helpPanel" aria-labelledby="helpTitle">
+      <div class="help-body">
+        <div class="help-head">
+          <h2 id="helpTitle">遊び方</h2>
+          <button type="button" class="btn ghost small" id="helpClose" aria-label="閉じる">✕</button>
+        </div>
+        <ul>
+          <li><b>押したまま(ドラッグ)</b>でボトルとグラスを持ちます。離すと両方とも元に戻ります。</li>
+          <li>傾きは<b>押している位置</b>で決まり、画面の目盛りのとおりになります。</li>
+          <li><b>縦軸</b>: ボトルの傾き。<b>0°(破線)で注ぎ始め</b>、上ほど勢いよく注ぎます。0° は液が注ぎ口に届く角度で、ボトルの中身が減るとその分だけ深く傾きます。</li>
+          <li><b>横軸</b>: グラスの傾き。右ほどボトル側へ傾きます(0〜60°)。</li>
+          <li><b>ホイール</b>(または右のスライダー): 注ぎ口の高さ。高いほど液柱が速く突っ込み、空気を巻き込みます。</li>
+          <li>液体が<b>目標線</b>に届いた時点でタイム確定。泡が落ち着くまで見届けて、こぼれた量を集計します。</li>
+          <li>記録 = タイム + こぼした液 1 mL ごとに <b>0.5 秒</b>。キーボード: R でやり直し、Space で押したまま、矢印で操作。</li>
+        </ul>
+      </div>
+    </dialog>
 
     <main class="layout">
       <section class="stage-col">
-        <div class="stage" id="stage">
-          <canvas id="scene" aria-label="グラスとボトルの様子" role="img"></canvas>
+        <div class="plot">
+          <canvas class="axes" id="axes" aria-hidden="true"></canvas>
+          <div class="stage" id="stage">
+            <canvas id="scene" aria-label="グラスとボトルの様子" role="img"></canvas>
 
-          <div class="hud hud-left" aria-live="off">
-            <div class="phase" id="phase">準備OK</div>
-            <div class="timer"><span id="hudTime">0.00</span><small>秒</small></div>
-            <div class="fill">
-              <div class="fill-bar"><span id="hudFillBar"></span></div>
-              <div class="fill-text">液体 <b id="hudLiquid">0</b> / <span id="hudTarget">0</span> mL</div>
-            </div>
-            <dl class="mini">
-              <div><dt>泡の厚さ</dt><dd><b id="hudFoam">0</b> mm</dd></div>
-              <div><dt>こぼれ</dt><dd><b id="hudSpill">0.0</b> mL</dd></div>
-            </dl>
-          </div>
-
-          <dl class="hud hud-right mini">
-            <div><dt>流量</dt><dd><b id="hudQ">0</b> mL/s</dd></div>
-            <div><dt>突入速度</dt><dd><b id="hudV">—</b> <span id="hudMode"></span></dd></div>
-            <div><dt>過飽和度 S</dt><dd><b id="hudS">—</b></dd></div>
-            <div><dt>液温 / グラス</dt><dd><b id="hudTL">—</b> / <b id="hudTg">—</b> ℃</dd></div>
-            <div><dt>ボトル残り</dt><dd><b id="hudBottle">500</b> mL</dd></div>
-          </dl>
-
-          <div class="guide guide-x" aria-hidden="true">← グラスを起こす ・ ボトル側へ傾ける →</div>
-          <div class="guide guide-y" aria-hidden="true">↑ 勢いよく注ぐ</div>
-
-          <div class="hint" id="hint">
-            <p><b>上にドラッグすると</b>注ぎ始めます</p>
-            <p class="sub">左右でグラスを傾け、壁を伝わせると泡が減ります</p>
-          </div>
-
-          <div class="result" id="result" hidden>
-            <div class="result-card" role="dialog" aria-labelledby="resultTitle">
-              <h2 id="resultTitle">クリア</h2>
-              <p class="record"><span id="resRecord">0.00</span><small>秒</small></p>
-              <p class="best" id="resBest"></p>
-              <dl>
-                <div><dt>タイム</dt><dd id="resTime">0.00 秒</dd></div>
-                <div><dt>こぼした量</dt><dd id="resSpill">0.0 mL</dd></div>
-                <div><dt>ペナルティ</dt><dd id="resPenalty">+0.00 秒</dd></div>
-                <div><dt>泡の最大の厚さ</dt><dd id="resFoam">0 mm</dd></div>
+            <div class="hud hud-left" aria-live="off">
+              <div class="timer"><span id="hudTime">0.00</span><small>秒</small></div>
+              <div class="fill">
+                <div class="fill-bar"><span id="hudFillBar"></span></div>
+                <div class="fill-text">液体 <b id="hudLiquid">0</b> / <span id="hudTarget">0</span> mL</div>
+              </div>
+              <dl class="mini">
+                <div><dt>泡の厚さ</dt><dd><b id="hudFoam">0</b> mm</dd></div>
+                <div><dt>こぼれ</dt><dd><b id="hudSpill">0.0</b> mL</dd></div>
               </dl>
-              <button type="button" class="btn primary" id="againBtn">もう一度(R)</button>
+            </div>
+
+            <dl class="hud hud-right mini">
+              <div><dt>流量</dt><dd><b id="hudQ">0</b> mL/s</dd></div>
+              <div><dt>突入速度</dt><dd><b id="hudV">—</b> <span id="hudMode"></span></dd></div>
+              <div><dt>過飽和度 S</dt><dd><b id="hudS">—</b></dd></div>
+              <div><dt>液温 / グラス</dt><dd><b id="hudTL">—</b> / <b id="hudTg">—</b> ℃</dd></div>
+              <div><dt>ボトル残り</dt><dd><b id="hudBottle">500</b> mL</dd></div>
+            </dl>
+
+
+            <div class="hint" id="hint">
+              <p><b>上下</b>でボトルを傾ける</p>
+              <p><b>左右</b>でグラスを傾ける</p>
+            </div>
+
+            <div class="result" id="result" hidden>
+              <div class="result-card" role="dialog" aria-labelledby="resultTitle">
+                <h2 id="resultTitle">クリア</h2>
+                <p class="record"><span id="resRecord">0.00</span><small>秒</small></p>
+                <p class="best" id="resBest"></p>
+                <dl>
+                  <div><dt>タイム</dt><dd id="resTime">0.00 秒</dd></div>
+                  <div><dt>こぼした量</dt><dd id="resSpill">0.0 mL</dd></div>
+                  <div><dt>ペナルティ</dt><dd id="resPenalty">+0.00 秒</dd></div>
+                  <div><dt>泡の最大の厚さ</dt><dd id="resFoam">0 mm</dd></div>
+                </dl>
+                <button type="button" class="btn primary" id="againBtn">もう一度(R)</button>
+              </div>
             </div>
           </div>
         </div>
@@ -91,15 +107,15 @@
 
         <div class="charts">
           <figure class="chart">
-            <figcaption>グラスの中身 <span class="unit">mL</span></figcaption>
+            <figcaption>グラスの中身</figcaption>
             <canvas id="chartVol"></canvas>
           </figure>
           <figure class="chart">
-            <figcaption>流量 <span class="unit">mL/s</span></figcaption>
+            <figcaption>流量</figcaption>
             <canvas id="chartFlow"></canvas>
           </figure>
           <figure class="chart budget">
-            <figcaption>CO₂ の行き先 <span class="unit">ボトルから出た分</span></figcaption>
+            <figcaption>CO₂ 内訳</figcaption>
             <div class="budget-bar" id="budgetBar"></div>
             <ul class="budget-legend" id="budgetLegend"></ul>
           </figure>
@@ -108,79 +124,114 @@
       </section>
 
       <aside class="panel">
-        <h2>条件</h2>
-        <form id="settings" autocomplete="off">
-          <label class="field">
-            <span>飲み物</span>
-            <select id="drink"></select>
-          </label>
-          <label class="field">
-            <span>液温 <output id="liquidTempOut"></output></span>
-            <input type="range" id="liquidTemp" min="0" max="35" step="1" value="5" />
-          </label>
-          <label class="field">
-            <span>グラス</span>
-            <select id="glass"></select>
-          </label>
-          <label class="field">
-            <span>グラスの温度 <output id="glassTempOut"></output></span>
-            <input type="range" id="glassTemp" min="0" max="45" step="1" value="20" />
-          </label>
-          <label class="field">
-            <span>グラスの表面</span>
-            <select id="surface"></select>
-          </label>
-          <label class="field">
-            <span>氷 <output id="iceOut"></output></span>
-            <input type="range" id="ice" min="0" max="4" step="1" value="0" />
-          </label>
-          <label class="field">
-            <span>目標量 <output id="targetOut"></output></span>
-            <input type="range" id="targetPct" min="50" max="95" step="1" value="85" />
-          </label>
+        <section class="panel-sec" aria-labelledby="secSettings">
+          <h2 id="secSettings">条件</h2>
+          <div class="panel-body">
+            <form id="settings" autocomplete="off">
+              <label class="field">
+                <span>飲み物</span>
+                <select id="drink"></select>
+              </label>
+              <label class="field">
+                <span>液温 <output id="liquidTempOut"></output></span>
+                <div class="thermo">
+                  <span class="thermo-bulb" aria-hidden="true"></span>
+                  <input type="range" class="thermo-input" id="liquidTemp" min="0" max="35" step="1" value="5" />
+                </div>
+                <div class="thermo-scale" data-for="liquidTemp" aria-hidden="true"></div>
+              </label>
+              <hr class="divider" />
+              <label class="field">
+                <span>グラス</span>
+                <select id="glass"></select>
+              </label>
+              <label class="field">
+                <span>グラスの温度 <output id="glassTempOut"></output></span>
+                <div class="thermo">
+                  <span class="thermo-bulb" aria-hidden="true"></span>
+                  <input type="range" class="thermo-input" id="glassTemp" min="0" max="45" step="1" value="20" />
+                </div>
+                <div class="thermo-scale" data-for="glassTemp" aria-hidden="true"></div>
+              </label>
+              <label class="field">
+                <span>グラスの表面</span>
+                <select id="surface"></select>
+              </label>
+              <hr class="divider" />
+              <label class="field">
+                <span>氷 <output id="iceOut"></output></span>
+                <input type="range" id="ice" min="0" max="4" step="1" value="0" />
+              </label>
+              <label class="field">
+                <span>目標量 <output id="targetOut"></output></span>
+                <input type="range" id="targetPct" min="50" max="95" step="1" value="85" />
+              </label>
+    
+              <details class="advanced" id="advanced">
+                <summary>詳しいパラメータ</summary>
+                <div class="field">
+                  <span>液体の諸元</span>
+                  <div class="facts" id="facts"></div>
+                </div>
+                <label class="field">
+                  <span>ガスボリューム <output id="gvOut"></output></span>
+                  <input type="range" id="gv" min="0" max="7" step="0.1" />
+                </label>
+                <label class="field">
+                  <span><span>泡の寿命 1/k<sub>c</sub></span> <output id="foamLifeOut"></output></span>
+                  <input type="range" id="foamLife" min="0" max="100" step="0.1" />
+                </label>
+                <label class="field">
+                  <span>核生成サイト密度 <output id="sitesOut"></output></span>
+                  <input type="range" id="sites" min="0" max="100" step="0.1" />
+                </label>
+                <label class="field">
+                  <span>空気の巻き込み倍率 <output id="entrainOut"></output></span>
+                  <input type="range" id="entrain" min="0.25" max="3" step="0.05" value="1" />
+                </label>
+                <button type="button" class="btn ghost small" id="resetAdvanced">飲み物・表面の標準値に戻す</button>
+              </details>
+            </form>
+          </div>
+        </section>
 
-          <details class="advanced" id="advanced">
-            <summary>詳しいパラメータ</summary>
+        <section class="panel-sec" aria-labelledby="secControls">
+          <h2 id="secControls">操作</h2>
+          <div class="panel-body">
             <label class="field">
-              <span>ガスボリューム <output id="gvOut"></output></span>
-              <input type="range" id="gv" min="0" max="7" step="0.1" />
+              <span>注ぎ口の高さ(縁から) <output id="mouthOut"></output></span>
+              <input type="range" id="mouth" min="0.5" max="12" step="0.5" value="1.5" />
             </label>
             <label class="field">
-              <span>泡の寿命 1/k<sub>c</sub> <output id="foamLifeOut"></output></span>
-              <input type="range" id="foamLife" min="0" max="100" step="0.1" />
+              <span>再生速度</span>
+              <select id="speed">
+                <option value="1">等速</option>
+                <option value="0.5">1/2 倍(スロー)</option>
+                <option value="0.25">1/4 倍(スロー)</option>
+              </select>
             </label>
-            <label class="field">
-              <span>核生成サイト密度 <output id="sitesOut"></output></span>
-              <input type="range" id="sites" min="0" max="100" step="0.1" />
-            </label>
-            <label class="field">
-              <span>空気の巻き込み倍率 <output id="entrainOut"></output></span>
-              <input type="range" id="entrain" min="0.25" max="3" step="0.05" value="1" />
-            </label>
-            <button type="button" class="btn ghost small" id="resetAdvanced">飲み物・表面の標準値に戻す</button>
-          </details>
-        </form>
+            <button type="button" class="btn primary wide" id="restartBtn">やり直す(R)</button>
+          </div>
+        </section>
 
-        <div class="facts" id="facts"></div>
-
-        <h2>操作</h2>
-        <label class="field">
-          <span>注ぎ口の高さ(縁から) <output id="mouthOut"></output></span>
-          <input type="range" id="mouth" min="0.5" max="12" step="0.5" value="1.5" />
-        </label>
-        <label class="field">
-          <span>再生速度</span>
-          <select id="speed">
-            <option value="1">等速</option>
-            <option value="0.5">1/2 倍(スロー)</option>
-            <option value="0.25">1/4 倍(スロー)</option>
-          </select>
-        </label>
-        <button type="button" class="btn primary wide" id="restartBtn">やり直す(R)</button>
-
-        <h2>記録</h2>
-        <p class="best-line" id="bestLine">この条件のベスト: —</p>
-        <ol class="recent" id="recent"></ol>
+        <section class="panel-sec" aria-labelledby="secRecords">
+          <h2 id="secRecords">記録</h2>
+          <div class="panel-body">
+            <p class="best-line" id="bestLine">この条件のベスト: —</p>
+            <table class="recent">
+              <caption>最近の記録(新しい順)</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="num">記録 <small>秒</small></th>
+                  <th scope="col">飲み物</th>
+                  <th scope="col">グラス</th>
+                  <th scope="col" class="num">こぼれ <small>mL</small></th>
+                </tr>
+              </thead>
+              <tbody id="recent"></tbody>
+            </table>
+          </div>
+        </section>
       </aside>
     </main>
 

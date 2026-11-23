@@ -33,7 +33,20 @@ jobs:
       - name: 公開するファイルをまとめる
         run: |
           mkdir _site
-          cp -r index.html css js _site/
+          cp -r index.html physics.html css js _site/
+
+      # 画面のバージョン表記(手元では「開発版」)を、公開するタグ名にする
+      - name: バージョン表記をタグ名にする
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*$ ]]; then
+            echo "::error::タグ名 $GITHUB_REF_NAME が vX.Y.Z の形ではありません"
+            exit 1
+          fi
+          sed -i "s|<!--VERSION-->[^<]*<!--/VERSION-->|$GITHUB_REF_NAME|" _site/index.html
+          if ! grep -qF ">$GITHUB_REF_NAME<" _site/index.html; then
+            echo "::error::index.html にバージョン表記の目印 <!--VERSION-->…<!--/VERSION--> が見つかりません"
+            exit 1
+          fi
 
       - uses: actions/configure-pages@v5
 

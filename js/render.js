@@ -26,6 +26,298 @@
     return out;
   }
 
+  // 輪郭 prof(内側の [z, r])の高さ z での半径
+  function radiusAt(prof, z) {
+    for (let i = 1; i < prof.length; i++) {
+      if (z <= prof[i][0]) {
+        const [z0, r0] = prof[i - 1];
+        const [z1, r1] = prof[i];
+        return r0 + ((r1 - r0) * (z - z0)) / (z1 - z0);
+      }
+    }
+    return prof[prof.length - 1][1];
+  }
+  // 輪郭のうち高さ z0〜z1 の部分(首の帯・口の箔など)の多角形
+  function bandPath(c, prof, z0, z1, off) {
+    const zs = [z0, ...prof.map((p) => p[0]).filter((z) => z > z0 && z < z1), z1];
+    c.beginPath();
+    for (const z of zs) c.lineTo(radiusAt(prof, z) + off, z);
+    for (let i = zs.length - 1; i >= 0; i--) c.lineTo(-(radiusAt(prof, zs[i]) + off), zs[i]);
+    c.closePath();
+  }
+
+  // ボトルの見た目。物理計算はどの飲み物も 500 mL の PET ボトルの形のままで、
+  // ここでは絵だけを変える(高さ・胴の太さ・口の位置はそろえてある)。
+  // profile: 内側の [z, r] [m], glass: ガラスの地の色, tint: 中身の上に重ねる色ガラス, edge: 輪郭線,
+  // shine: つやの長さ [m], label: ラベルを描く関数(this は SceneRenderer)
+
+  // PET ボトルの胴に巻くラベルの範囲(胴の半径 32 mm より少し外まで)
+  const PET_X = 0.0325;
+  // PET ボトルの首のリング
+  function petRing(c, s, fill, edge) {
+    c.fillStyle = fill;
+    c.strokeStyle = edge;
+    c.lineWidth = 1.2 / s;
+    c.fillRect(-0.0165, 0.1855, 0.033, 0.0022);
+    c.strokeRect(-0.0165, 0.1855, 0.033, 0.0022);
+  }
+  // ラベルの四角(z0〜z1)の中だけに描く
+  function clipLabel(c, z0, z1, draw) {
+    c.save();
+    c.beginPath();
+    c.rect(-PET_X, z0, 2 * PET_X, z1 - z0);
+    c.clip();
+    draw();
+    c.restore();
+  }
+  // 下端 z0 から高さ h の波(振幅 a、山 n 個)を塗る
+  function wave(c, z0, h, a, n, phase, color) {
+    c.beginPath();
+    c.moveTo(-PET_X, z0);
+    for (let i = 0; i <= 24; i++) {
+      const x = -PET_X + (2 * PET_X * i) / 24;
+      c.lineTo(x, z0 + h + a * Math.sin((n * TAU * i) / 24 + phase));
+    }
+    c.lineTo(PET_X, z0);
+    c.closePath();
+    c.fillStyle = color;
+    c.fill();
+  }
+
+  const BOTTLE_LOOKS = {
+    // 予備(見た目を指定していない飲み物)
+    pet: {
+      profile: P.BOTTLE.profile,
+      glass: 'rgba(225,238,244,0.35)',
+      edge: 'rgba(95,125,145,0.8)',
+      shine: 0.13,
+      label(sim) {
+        const c = this.ctx;
+        c.fillStyle = 'rgba(240,246,244,0.92)';
+        c.fillRect(-PET_X, 0.05, 2 * PET_X, 0.06);
+        c.fillStyle = 'rgba(14,104,116,0.96)';
+        c.fillRect(-PET_X, 0.072, 2 * PET_X, 0.016);
+        this.bottleText(sim.drink.label, 0.08, 0.0105, 0.056, { color: '#ffffff' });
+        petRing(c, this.s, 'rgba(200,215,225,0.9)', 'rgba(95,125,145,0.8)');
+      },
+    },
+    // 水: 薄い青の PET に横の段(リブ)、空色のラベルに雪山
+    water: {
+      profile: P.BOTTLE.profile,
+      glass: 'rgba(214,234,250,0.42)',
+      edge: 'rgba(90,130,170,0.8)',
+      shine: 0.13,
+      label(sim) {
+        const c = this.ctx;
+        const lw = 1 / this.s;
+        for (const z of [0.018, 0.03, 0.042, 0.118, 0.13, 0.142]) {
+          c.fillStyle = 'rgba(110,150,185,0.35)';
+          c.fillRect(-0.0325, z - 0.9 * lw, 0.065, 1.2 * lw);
+          c.fillStyle = 'rgba(255,255,255,0.55)';
+          c.fillRect(-0.0325, z + 0.3 * lw, 0.065, 1.2 * lw);
+        }
+        clipLabel(c, 0.055, 0.105, () => {
+          c.fillStyle = 'rgba(228,242,253,0.96)';
+          c.fillRect(-PET_X, 0.055, 2 * PET_X, 0.05);
+          // 山並み(奥の薄い山と手前の濃い山)と雪
+          c.beginPath();
+          c.moveTo(-PET_X, 0.055);
+          c.lineTo(-0.024, 0.07);
+          c.lineTo(-0.008, 0.06);
+          c.lineTo(PET_X, 0.068);
+          c.lineTo(PET_X, 0.055);
+          c.fillStyle = 'rgba(140,185,225,0.9)';
+          c.fill();
+          c.beginPath();
+          c.moveTo(-PET_X, 0.055);
+          c.lineTo(-0.012, 0.077);
+          c.lineTo(0.0, 0.066);
+          c.lineTo(0.014, 0.084);
+          c.lineTo(PET_X, 0.06);
+          c.lineTo(PET_X, 0.055);
+          c.fillStyle = 'rgba(46,108,178,0.95)';
+          c.fill();
+          c.beginPath();
+          c.moveTo(0.0098, 0.0786);
+          c.lineTo(0.014, 0.084);
+          c.lineTo(0.0196, 0.0768);
+          c.lineTo(0.0152, 0.0782);
+          c.lineTo(0.0125, 0.0772);
+          c.fillStyle = '#ffffff';
+          c.fill();
+        });
+        this.bottleText(sim.drink.label, 0.096, 0.0085, 0.05, { color: 'rgba(24,70,130,1)' });
+        petRing(c, this.s, 'rgba(205,225,245,0.9)', 'rgba(90,130,170,0.8)');
+      },
+    },
+    // 炭酸水: うっすら緑がかった PET、深い青緑のラベルに泡の模様
+    soda: {
+      profile: P.BOTTLE.profile,
+      glass: 'rgba(212,238,230,0.38)',
+      edge: 'rgba(80,135,130,0.8)',
+      shine: 0.13,
+      label(sim) {
+        const c = this.ctx;
+        clipLabel(c, 0.052, 0.108, () => {
+          c.fillStyle = 'rgba(10,100,112,0.96)';
+          c.fillRect(-PET_X, 0.052, 2 * PET_X, 0.056);
+          c.lineWidth = 0.0006;
+          c.strokeStyle = 'rgba(255,255,255,0.6)';
+          const bubbles = [[-0.026, 0.062, 0.003], [-0.021, 0.098, 0.002], [-0.015, 0.058, 0.0015], [-0.028, 0.086, 0.0018], [0.018, 0.06, 0.0025], [0.025, 0.099, 0.0032], [0.027, 0.071, 0.0016], [0.02, 0.089, 0.0013]];
+          for (const [x, z, r] of bubbles) {
+            c.beginPath();
+            c.arc(x, z, r, 0, TAU);
+            c.stroke();
+          }
+          c.fillStyle = 'rgba(255,255,255,0.75)';
+          c.fillRect(-PET_X, 0.0545, 2 * PET_X, 0.0008);
+          c.fillRect(-PET_X, 0.1047, 2 * PET_X, 0.0008);
+        });
+        this.bottleText(sim.drink.label, 0.08, 0.0105, 0.036, { color: '#ffffff' });
+        petRing(c, this.s, 'rgba(200,225,220,0.9)', 'rgba(80,135,130,0.8)');
+      },
+    },
+    // コーラ: 赤いラベルに白い細線と白い斜体の文字
+    cola: {
+      profile: P.BOTTLE.profile,
+      glass: 'rgba(225,232,236,0.35)',
+      edge: 'rgba(110,110,115,0.8)',
+      shine: 0.13,
+      label(sim) {
+        const c = this.ctx;
+        c.fillStyle = 'rgba(190,28,34,0.97)';
+        c.fillRect(-PET_X, 0.05, 2 * PET_X, 0.06);
+        c.fillStyle = 'rgba(255,255,255,0.9)';
+        c.fillRect(-PET_X, 0.0545, 2 * PET_X, 0.0011);
+        c.fillRect(-PET_X, 0.1044, 2 * PET_X, 0.0011);
+        this.bottleText(sim.drink.label, 0.08, 0.0125, 0.05, { color: '#ffffff', weight: 'italic 800' });
+        petRing(c, this.s, 'rgba(190,28,34,0.95)', 'rgba(120,20,24,0.9)');
+      },
+    },
+    // サイダー: 白いラベルにライムグリーンの波とレモンの輪切り
+    cider: {
+      profile: P.BOTTLE.profile,
+      glass: 'rgba(228,244,236,0.38)',
+      edge: 'rgba(95,140,115,0.8)',
+      shine: 0.13,
+      label(sim) {
+        const c = this.ctx;
+        clipLabel(c, 0.05, 0.11, () => {
+          c.fillStyle = 'rgba(250,252,246,0.96)';
+          c.fillRect(-PET_X, 0.05, 2 * PET_X, 0.06);
+          wave(c, 0.05, 0.016, 0.0025, 1.5, 0.8, 'rgba(176,218,96,0.95)');
+          wave(c, 0.05, 0.011, 0.0022, 2, 0, 'rgba(60,150,64,0.96)');
+          c.fillStyle = 'rgba(60,150,64,0.96)';
+          c.fillRect(-PET_X, 0.1065, 2 * PET_X, 0.0012);
+        });
+        // レモンの輪切り(右上)
+        c.beginPath();
+        c.arc(0.0235, 0.0985, 0.0048, 0, TAU);
+        c.fillStyle = 'rgba(244,206,40,0.98)';
+        c.fill();
+        c.beginPath();
+        c.arc(0.0235, 0.0985, 0.0036, 0, TAU);
+        c.fillStyle = 'rgba(255,240,150,0.98)';
+        c.fill();
+        c.strokeStyle = 'rgba(244,206,40,0.98)';
+        c.lineWidth = 0.0005;
+        for (let i = 0; i < 4; i++) {
+          const a = (i * Math.PI) / 4;
+          c.beginPath();
+          c.moveTo(0.0235 - 0.0036 * Math.cos(a), 0.0985 - 0.0036 * Math.sin(a));
+          c.lineTo(0.0235 + 0.0036 * Math.cos(a), 0.0985 + 0.0036 * Math.sin(a));
+          c.stroke();
+        }
+        this.bottleText(sim.drink.label, 0.083, 0.0105, 0.04, { color: 'rgba(28,110,50,1)' });
+        petRing(c, this.s, 'rgba(215,235,220,0.9)', 'rgba(95,140,115,0.8)');
+      },
+    },
+    // ロングネックの緑のビール瓶。丸いラベルに名前のリボン、首にも帯
+    beer: {
+      profile: [[0, 0.03], [0.006, 0.032], [0.125, 0.032], [0.14, 0.029], [0.152, 0.022], [0.162, 0.0145], [0.172, 0.0122], [0.197, 0.0115], [0.199, 0.013], [0.205, 0.0125]],
+      glass: 'rgba(200,225,200,0.25)',
+      tint: 'rgba(46,110,60,0.2)',
+      edge: 'rgba(40,90,50,0.85)',
+      shine: 0.11,
+      label(sim, prof, t) {
+        const c = this.ctx;
+        const green = 'rgba(28,78,44,0.96)';
+        const gold = 'rgba(196,160,72,0.95)';
+        bandPath(c, prof, 0.158, 0.172, t);
+        c.fillStyle = green;
+        c.fill();
+        c.fillStyle = gold;
+        c.fillRect(-0.02, 0.1585, 0.04, 0.0009);
+        const zc = 0.068;
+        c.beginPath();
+        c.ellipse(0, zc, 0.027, 0.03, 0, 0, TAU);
+        c.fillStyle = 'rgba(247,242,226,0.97)';
+        c.fill();
+        c.lineWidth = 0.0024;
+        c.strokeStyle = green;
+        c.stroke();
+        c.beginPath();
+        c.ellipse(0, zc, 0.0225, 0.0255, 0, 0, TAU);
+        c.lineWidth = 0.0008;
+        c.strokeStyle = gold;
+        c.stroke();
+        for (const dz of [0.017, -0.017]) {
+          c.beginPath();
+          c.arc(0, zc + dz, 0.0018, 0, TAU);
+          c.fillStyle = gold;
+          c.fill();
+        }
+        c.fillStyle = green;
+        c.fillRect(-0.0285, zc - 0.0065, 0.057, 0.013);
+        this.bottleText(sim.drink.label, zc, 0.0095, 0.046, { color: '#ffffff' });
+      },
+    },
+    // なで肩の濃い緑の瓶。口は金の箔、胴に四角いラベル、名前はセリフ体
+    champagne: {
+      profile: [[0, 0.031], [0.006, 0.033], [0.105, 0.033], [0.122, 0.0315], [0.14, 0.0265], [0.156, 0.0195], [0.17, 0.0148], [0.19, 0.0132], [0.198, 0.0128], [0.2, 0.0145], [0.205, 0.014]],
+      glass: 'rgba(190,210,190,0.22)',
+      tint: 'rgba(28,62,38,0.34)',
+      edge: 'rgba(25,50,32,0.9)',
+      shine: 0.095,
+      label(sim, prof, t) {
+        const c = this.ctx;
+        const gold = 'rgba(184,148,66,0.96)';
+        const ink = 'rgba(45,38,26,1)';
+        const serif = 'Georgia, "Times New Roman", serif';
+        // 口の箔
+        bandPath(c, prof, 0.163, 0.205, t + 0.0004);
+        c.fillStyle = 'rgba(204,172,92,0.97)';
+        c.fill();
+        bandPath(c, prof, 0.163, 0.1665, t + 0.0005);
+        c.fillStyle = 'rgba(130,100,44,0.95)';
+        c.fill();
+        // 四角いラベル(金の枠と、内側の細い枠)
+        c.fillStyle = 'rgba(250,246,234,0.97)';
+        c.fillRect(-0.027, 0.038, 0.054, 0.056);
+        c.lineWidth = 0.0012;
+        c.strokeStyle = gold;
+        c.strokeRect(-0.027, 0.038, 0.054, 0.056);
+        c.lineWidth = 0.0005;
+        c.strokeStyle = 'rgba(60,50,35,0.7)';
+        c.strokeRect(-0.0242, 0.0408, 0.0484, 0.0504);
+        this.bottleText(sim.drink.label, 0.071, 0.0085, 0.044, { color: ink, family: serif, weight: 400 });
+        c.fillStyle = gold;
+        c.fillRect(-0.012, 0.0615, 0.024, 0.0007);
+        this.bottleText('BRUT', 0.0545, 0.005, 0.03, { color: ink, family: serif, weight: 400 });
+      },
+    },
+  };
+
+  // 操作のグラフの目盛り(10° ごと)。縦はボトル(注ぎ始めからの差)、横はグラス
+  function controlTicks(m) {
+    const ys = [];
+    for (let d = Math.ceil(m.bottleDeg(0) / 10) * 10; d <= m.bottleDeg(1); d += 10) ys.push(d);
+    const xs = [];
+    for (let d = 0; d <= m.GLASS_MAX_DEG; d += 10) xs.push(d);
+    return { ys, xs };
+  }
+  const fmtDeg = (d) => (d > 0 ? `+${d}°` : d < 0 ? `−${-d}°` : '0°');
+
   class SceneRenderer {
     constructor(canvas) {
       this.canvas = canvas;
@@ -52,7 +344,10 @@
         tableTop: v('--table-top', '#c39a6b'),
         tableFront: v('--table-front', '#8f6643'),
         ink: v('--text-secondary', '#52514e'),
-        tile: v('--scene-tile', 'rgba(0,0,0,0.035)'),
+        grid: v('--scene-grid', 'rgba(0,0,0,0.12)'),
+        accent: v('--accent', '#0f7f86'),
+        accentInk: v('--accent-ink', '#ffffff'),
+        label: v('--hud-bg', 'rgba(255,255,255,0.78)'),
       };
     }
 
@@ -143,6 +438,7 @@
       this.screen();
       c.clearRect(0, 0, this.W, this.H);
       this.drawBackground(sim);
+      this.drawControlGrid();
       this.consumeSpill(sim, dt);
       this.drawPuddle(sim);
       this.drawGlassBody(sim);
@@ -153,6 +449,167 @@
       this.drawBottle(sim);
       this.drawParticles(sim, dt);
       this.screen();
+      this.drawPointer();
+    }
+
+    // ---------- 操作のグラフ ----------
+    // ゲームの枠全体を「押した位置 → 傾き」のグラフとして見せる。縦軸はボトルの傾き(液が注ぎ口に
+    // 届く角度からの差)、横軸はグラスの傾き。対応は main.js の CONTROL_MAP が決め、
+    // this.ctrl = { map, input, avoid } で渡される。目盛りラベルは枠の外の ControlAxes が描く。
+    py(uy) {
+      return (1 - uy) * this.H;
+    }
+
+    drawControlGrid() {
+      if (!this.ctrl) return;
+      const c = this.ctx;
+      const t = this.theme;
+      const m = this.ctrl.map;
+      const { ys, xs } = controlTicks(m);
+      // グラスの傾きが変わらない範囲(左は立てたまま、右は最大のまま)を薄く塗る
+      const xa = m.uxAtGlassDeg(0) * this.W;
+      const xb = m.uxAtGlassDeg(m.GLASS_MAX_DEG) * this.W;
+      c.fillStyle = t.grid;
+      c.globalAlpha = 0.3;
+      c.fillRect(0, 0, xa, this.H);
+      c.fillRect(xb, 0, this.W - xb, this.H);
+      c.globalAlpha = 1;
+      c.strokeStyle = t.grid;
+      c.lineWidth = 1;
+      c.beginPath();
+      for (const d of xs) {
+        const x = Math.round(m.uxAtGlassDeg(d) * this.W) + 0.5;
+        c.moveTo(x, 0);
+        c.lineTo(x, this.H);
+      }
+      for (const d of ys) {
+        if (d === 0) continue;
+        const y = Math.round(this.py(m.uyAtBottleDeg(d))) + 0.5;
+        c.moveTo(0, y);
+        c.lineTo(this.W, y);
+      }
+      c.stroke();
+      // 0°(液が出始める傾き)の線だけ濃い破線にする
+      const y0 = Math.round(this.py(m.uyAtBottleDeg(0))) + 0.5;
+      c.strokeStyle = t.ink;
+      c.globalAlpha = 0.5;
+      c.setLineDash([6, 4]);
+      c.beginPath();
+      c.moveTo(0, y0);
+      c.lineTo(this.W, y0);
+      c.stroke();
+      c.setLineDash([]);
+      c.globalAlpha = 1;
+    }
+
+    setFont(px, weight) {
+      this.ctx.font = `${weight} ${px}px system-ui, sans-serif`;
+    }
+
+    // 押している位置(マウスなら押す前の位置も)を十字線で示し、その時の傾きをカーソルのそばに出す
+    drawPointer() {
+      if (!this.ctrl) return;
+      const { map: m, input } = this.ctrl;
+      if (!input.active && !input.hover) return;
+      const c = this.ctx;
+      const t = this.theme;
+      const x = input.ux * this.W;
+      const y = this.py(input.uy);
+      c.strokeStyle = t.accent;
+      c.lineWidth = input.active ? 1.5 : 1;
+      c.globalAlpha = input.active ? 0.9 : 0.55;
+      if (!input.active) c.setLineDash([4, 4]);
+      c.beginPath();
+      c.moveTo(0, Math.round(y) + 0.5);
+      c.lineTo(this.W, Math.round(y) + 0.5);
+      c.moveTo(Math.round(x) + 0.5, 0);
+      c.lineTo(Math.round(x) + 0.5, this.H);
+      c.stroke();
+      c.setLineDash([]);
+      c.globalAlpha = 1;
+      c.fillStyle = t.accent;
+      c.beginPath();
+      c.arc(x, y, input.active ? 4.5 : 3.5, 0, TAU);
+      c.fill();
+      this.drawReadout(x, y, [
+        ['ボトル', fmtDeg(Math.round(m.bottleDeg(input.uy))), 'v'],
+        ['グラス', `${Math.round(m.glassDeg(input.ux))}°`, 'h'],
+      ]);
+    }
+
+    // カーソルのそばに今の傾きを小さな札で出す。指で押しても隠れないよう右上を優先し、
+    // はみ出すときや画面に重ねた表示(this.ctrl.avoid() が返す枠)に隠れるときは左上・右下・左下へ
+    drawReadout(x, y, rows) {
+      const c = this.ctx;
+      const t = this.theme;
+      const pad = 8;
+      const rowH = 20;
+      this.setFont(12, 600);
+      const icon = 10; // 名前の後ろの両向き矢印の大きさ
+      const lw = Math.max(...rows.map((r) => c.measureText(r[0]).width)) + 5 + icon;
+      this.setFont(15, 700);
+      const vw = Math.max(...rows.map((r) => c.measureText(r[1]).width));
+      const w = pad * 2 + lw + 10 + vw;
+      const h = pad * 2 + rowH * rows.length - 4;
+      const gap = 16;
+      const avoid = this.ctrl.avoid ? this.ctrl.avoid() : [];
+      const spots = [
+        [x + gap, y - gap - h],
+        [x - gap - w, y - gap - h],
+        [x + gap, y + gap],
+        [x - gap - w, y + gap],
+      ];
+      const fits = ([a, b]) =>
+        a >= 4 && b >= 4 && a + w <= this.W - 4 && b + h <= this.H - 4 &&
+        !avoid.some((r) => a < r.x1 && a + w > r.x0 && b < r.y1 && b + h > r.y0);
+      const [x0, y0] = spots.find(fits) || spots[0];
+      c.fillStyle = t.label;
+      c.strokeStyle = t.accent;
+      c.lineWidth = 1.5;
+      c.beginPath();
+      if (c.roundRect) c.roundRect(x0, y0, w, h, 8);
+      else c.rect(x0, y0, w, h);
+      c.fill();
+      c.stroke();
+      c.textBaseline = 'middle';
+      rows.forEach(([label, value, dir], i) => {
+        const ym = y0 + pad + rowH * i + (rowH - 4) / 2 + 0.5;
+        this.setFont(12, 600);
+        c.fillStyle = t.ink;
+        c.textAlign = 'left';
+        c.fillText(label, x0 + pad, ym);
+        this.drawDoubleArrow(x0 + pad + c.measureText(label).width + 5 + icon / 2, ym, icon, dir, t.ink);
+        this.setFont(15, 700);
+        c.fillStyle = t.accent;
+        c.textAlign = 'right';
+        c.fillText(value, x0 + w - pad, ym);
+      });
+      c.textAlign = 'left';
+    }
+
+    // 両向きの矢印(dir: 'v' は上下、'h' は左右)。文字の ↕ ↔ は字体によって形が崩れるので図形で描く
+    drawDoubleArrow(cx, cy, size, dir, color) {
+      const c = this.ctx;
+      const r = size / 2;
+      const head = 3.2;
+      c.save();
+      c.translate(cx, cy);
+      if (dir === 'h') c.rotate(Math.PI / 2);
+      c.strokeStyle = color;
+      c.lineWidth = 1.5;
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      c.beginPath();
+      c.moveTo(0, -r);
+      c.lineTo(0, r);
+      c.moveTo(-head, -r + head);
+      c.lineTo(0, -r);
+      c.lineTo(head, -r + head);
+      c.moveTo(-head, r - head);
+      c.lineTo(0, r);
+      c.lineTo(head, r - head);
+      c.stroke();
+      c.restore();
     }
 
     drawBackground(sim) {
@@ -164,20 +621,6 @@
       g.addColorStop(1, t.wallBottom);
       c.fillStyle = g;
       c.fillRect(0, 0, this.W, ty);
-      // タイル目地
-      c.strokeStyle = t.tile;
-      c.lineWidth = 1;
-      const step = Math.max(28, this.s * 0.05);
-      c.beginPath();
-      for (let y = ty - step; y > 0; y -= step) {
-        c.moveTo(0, y);
-        c.lineTo(this.W, y);
-      }
-      for (let x = (this.X(0) % step) - step; x < this.W; x += step) {
-        c.moveTo(x, 0);
-        c.lineTo(x, ty);
-      }
-      c.stroke();
       // テーブル
       const depth = Math.max(10, this.s * 0.018);
       c.fillStyle = t.tableTop;
@@ -516,13 +959,36 @@
       c.fillText('目標', this.X(lp.x), this.Y(lp.y));
     }
 
+    // 飲み物の名前などを、ボトルの座標 (0, z) を中心に横書きで描く。0.01 px のような極小フォントは
+    // 文字の位置がずれるので、座標を画素単位に戻してから描く(上向きが正なので上下も反転する)。
+    // room [m] より長い文字は収まるまで小さくする
+    bottleText(text, z, size, room, style) {
+      const c = this.ctx;
+      c.save();
+      c.translate(0, z);
+      const m = c.getTransform();
+      const k = Math.hypot(m.a, m.b);
+      c.setTransform(m.a / k, m.b / k, -m.c / k, -m.d / k, m.e, m.f);
+      const font = (px) => `${style.weight || 700} ${px.toFixed(2)}px ${style.family || 'system-ui, sans-serif'}`;
+      let px = size * k;
+      c.font = font(px);
+      const w = c.measureText(text).width;
+      if (w > room * k) c.font = font((px * room * k) / w);
+      c.fillStyle = style.color;
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText(text, 0, 0);
+      c.restore();
+    }
+
     drawBottle(sim) {
       const c = this.ctx;
       const phi = sim.phi;
       const O = { x: sim.bottleOx, y: sim.bottleOy };
       const eu = { x: Math.cos(phi), y: Math.sin(phi) };
       const ez = { x: -Math.sin(phi), y: Math.cos(phi) };
-      const prof = P.BOTTLE.profile;
+      const look = BOTTLE_LOOKS[sim.drink.bottle] || BOTTLE_LOOKS.pet;
+      const prof = look.profile;
       const t = 0.0009;
       const outline = (off) => {
         c.beginPath();
@@ -534,7 +1000,7 @@
       const lw = 1 / this.s;
       // 本体
       outline(t);
-      c.fillStyle = 'rgba(225,238,244,0.35)';
+      c.fillStyle = look.glass;
       c.fill();
       // 中身(水平な液面で切る)
       if (sim.Vb > 1e-8 && sim.bottleLevel > -0.5) {
@@ -548,31 +1014,20 @@
         c.restore();
         this.frame(O, eu, ez);
       }
-      // ラベル
-      c.fillStyle = 'rgba(240,246,244,0.92)';
-      c.fillRect(-0.0325, 0.05, 0.065, 0.06);
-      c.fillStyle = 'rgba(20,130,140,0.9)';
-      c.fillRect(-0.0325, 0.072, 0.065, 0.016);
-      c.save();
-      c.translate(0, 0.08);
-      c.rotate(-Math.PI / 2);
-      c.scale(1, -1);
-      c.fillStyle = 'rgba(255,255,255,0.95)';
-      c.font = `700 ${0.011}px system-ui, sans-serif`;
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.fillText('SODA', 0, 0);
-      c.restore();
-      // 輪郭・口
+      // 色ガラス(中身が透けて見える程度に)
+      if (look.tint) {
+        outline(t);
+        c.fillStyle = look.tint;
+        c.fill();
+      }
+      look.label.call(this, sim, prof, t, lw);
+      // 輪郭・つや
       outline(t);
-      c.strokeStyle = 'rgba(95,125,145,0.8)';
+      c.strokeStyle = look.edge;
       c.lineWidth = 1.2 * lw;
       c.stroke();
-      c.fillStyle = 'rgba(200,215,225,0.9)';
-      c.fillRect(-0.0165, 0.1855, 0.033, 0.0022);
-      c.strokeRect(-0.0165, 0.1855, 0.033, 0.0022);
       c.fillStyle = 'rgba(255,255,255,0.35)';
-      c.fillRect(-0.026, 0.012, 0.005, 0.13);
+      c.fillRect(-0.026, 0.012, 0.005, look.shine);
       this.screen();
     }
 
@@ -626,5 +1081,59 @@
     }
   }
 
+  // ゲームの枠の外(左と下の余白)に、操作のグラフの目盛りラベルと軸名を描く。
+  // 目盛りは変わらないので、大きさやテーマが変わったときだけ描き直す
+  class ControlAxes {
+    constructor(canvas, frame, map) {
+      this.canvas = canvas;
+      this.frame = frame;
+      this.map = map;
+      this.ctx = canvas.getContext('2d');
+    }
+
+    draw() {
+      const cv = this.canvas;
+      const r = cv.getBoundingClientRect();
+      const f = this.frame.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = Math.round(r.width * dpr);
+      cv.height = Math.round(r.height * dpr);
+      const c = this.ctx;
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      c.clearRect(0, 0, r.width, r.height);
+      // 枠の位置(この canvas の中の px)
+      const fx = f.left - r.left;
+      const fy = f.top - r.top;
+      const fw = f.width;
+      const fh = f.height;
+      const m = this.map;
+      const { ys, xs } = controlTicks(m);
+      const cs = getComputedStyle(document.documentElement);
+      const ink = (cs.getPropertyValue('--text-secondary') || '').trim() || '#52514e';
+      const tick = fw < 500 ? 12 : 14; // 狭い画面では少し小さく
+      c.fillStyle = ink;
+      // 縦軸: 目盛りラベルは枠の左に右揃え、軸名はその左に縦書きで枠の高さの中央
+      c.font = `600 ${tick}px system-ui, sans-serif`;
+      c.textAlign = 'right';
+      c.textBaseline = 'middle';
+      for (const d of ys) c.fillText(fmtDeg(d), fx - 6, fy + (1 - m.uyAtBottleDeg(d)) * fh);
+      c.font = '600 12px system-ui, sans-serif';
+      c.textAlign = 'center';
+      c.save();
+      c.translate(8, fy + fh / 2);
+      c.rotate(-Math.PI / 2);
+      c.fillText('ボトルの傾き →', 0, 0);
+      c.restore();
+      // 横軸: 目盛りラベルは枠の下、軸名はその下で枠の幅の中央
+      c.font = `600 ${tick}px system-ui, sans-serif`;
+      c.textBaseline = 'top';
+      for (const d of xs) c.fillText(`${d}°`, fx + m.uxAtGlassDeg(d) * fw, fy + fh + 5);
+      c.font = '600 12px system-ui, sans-serif';
+      c.textBaseline = 'bottom';
+      c.fillText('グラスの傾き →', fx + fw / 2, r.height - 2);
+    }
+  }
+
   window.SceneRenderer = SceneRenderer;
+  window.ControlAxes = ControlAxes;
 })();

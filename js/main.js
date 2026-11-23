@@ -1,8 +1,9 @@
 /*
  * Soda Server — 画面の組み立てと入力
- * マウス/タッチを押している間だけボトルとグラスを持つ:
- *   上下 → ボトルの傾き(液が口に届く角度を基準に、上ほど深く傾ける)
- *   左右 → グラスの傾き(右ほどボトル側へ。壁を伝わせられる)
+ * マウス/タッチを押している間だけボトルとグラスを持つ。傾きは押している位置で決まり、
+ * 画面にはその対応をグラフの目盛りとして描く(CONTROL_MAP):
+ *   縦 → ボトルの傾き(液が口に届く角度を基準に、上ほど深く傾ける)
+ *   横 → グラスの傾き(右ほどボトル側へ。壁を伝わせられる)
  *   ホイール → 注ぎ口の高さ
  */
 (function () {
@@ -10,6 +11,19 @@
   const P = window.SodaPhysics;
   const $ = (id) => document.getElementById(id);
   const clamp = P.clamp;
+
+  // 押した位置(画面の左端・下端を 0、右端・上端を 1)→ 傾き [°]。
+  // 縦: 液が口に届く角度(残量で変わる)の 14° 手前 〜 27° 先。下から 1/3 あたりで出始め、
+  //     上 1/5 ほどでゴボゴボ言う全開になる。
+  // 横: 左 15% は立てたまま、そこから 80% までで 0 → 60°、その先は 60° のまま。
+  const RAD = 180 / Math.PI;
+  const CONTROL_MAP = {
+    GLASS_MAX_DEG: Math.round(P.MAX_GLASS_TILT * RAD), // 60(そのままだと 59.999… になる)
+    bottleDeg: (uy) => (uy * 0.72 - 0.25) * RAD,
+    uyAtBottleDeg: (d) => (d / RAD + 0.25) / 0.72,
+    glassDeg: (ux) => P.MAX_GLASS_TILT * RAD * clamp((ux - 0.15) / 0.65, 0, 1),
+    uxAtGlassDeg: (d) => 0.15 + (0.65 * d) / (P.MAX_GLASS_TILT * RAD),
+  };
 
   // ---------- 保存(このブラウザだけ) ----------
   const store = {
@@ -47,6 +61,29 @@
   $('glass').value = P.DEFAULT_SETTINGS.glass;
   $('surface').value = P.DEFAULT_SETTINGS.surface;
 
+  // 温度計の形のスライダー(液温・グラスの温度)。液柱の長さと目盛りの位置は CSS と同じ
+  // 「8px + (幅 − 16px) × 割合」で置く(16px はつまみの幅)
+  const thermoPos = (p) => `calc(8px + (100% - 16px) * ${p})`;
+  for (const scale of document.querySelectorAll('.thermo-scale')) {
+    const inp = $(scale.dataset.for);
+    const min = +inp.min;
+    const max = +inp.max;
+    let html = '';
+    for (let v = min; v <= max; v += 5) {
+      const pos = thermoPos((v - min) / (max - min));
+      const major = v % 10 === 0;
+      html += `<span class="tick${major ? ' major' : ''}" style="left:${pos}"></span>`;
+      if (major) html += `<span class="tick-label" style="left:${pos}">${v}</span>`;
+    }
+    scale.innerHTML = html;
+  }
+  // 自分で塗りを描くスライダー(温度計と氷)の塗りの割合 --p を値に合わせる
+  function thermoFill() {
+    for (const inp of document.querySelectorAll('.thermo-input, #ice')) {
+      inp.style.setProperty('--p', String((inp.value - inp.min) / (inp.max - inp.min)));
+    }
+  }
+
   // 対数スライダー(0〜100 → min〜max)
   const logMap = (min, max) => ({
     to: (v) => min * Math.pow(max / min, v / 100),
@@ -82,6 +119,7 @@
   }
 
   function updateOutputs(s, sim) {
+    thermoFill();
     $('liquidTempOut').textContent = `${s.liquidTemp} ℃`;
     $('glassTempOut').textContent = `${s.glassTemp} ℃`;
     $('iceOut').textContent = s.ice ? `${s.ice} 個` : 'なし';
@@ -92,15 +130,19 @@
     $('entrainOut').textContent = `× ${s.entrain.toFixed(2)}`;
     const ceq = P.solubilityGL(s.liquidTemp) * sim.drink.salt;
     const cl = s.gv * P.GV_GL;
+    // 説明を左、数値を右に並べる
+    const row = (name, value) => `<div class="row"><span>${name}</span><span>${value}</span></div>`;
     const gas =
       s.gv > 0
-        ? `<div>溶けている CO₂ <b>${cl.toFixed(1)} g/L</b> ・ 溶けていられる量 <b>${ceq.toFixed(2)} g/L</b></div>` +
-          `<div>過飽和度 S = <b>${(cl / ceq - 1).toFixed(2)}</b>(液温で決まる)</div>`
-        : '<div>CO₂ は溶けていません(泡は巻き込んだ空気だけ)</div>';
+        ? row('溶解CO₂ / 飽和溶解CO₂', `(<b>${cl.toFixed(1)}</b> g/L) / (<b>${ceq.toFixed(2)}</b> g/L)`) +
+          row('過飽和度 S', `<b>${(cl / ceq - 1).toFixed(2)}</b>`)
+        : row('溶解CO₂', '<b>なし</b>');
     $('facts').innerHTML =
-      `<div>グラス容量 <b>${Math.round(sim.glass.volume * 1e6)} mL</b> ・ 目標 <b>${Math.round(sim.targetVolume * 1e6)} mL</b></div>` +
+      row('グラス容量', `<b>${Math.round(sim.glass.volume * 1e6)}</b> mL`) +
+      row('目標', `<b>${Math.round(sim.targetVolume * 1e6)}</b> mL`) +
       gas +
-      `<div>泡の寿命 <b>${s.foamLife} 秒</b> ・ サイト <b>${s.siteDensity} 個/cm²</b></div>`;
+      row('泡の寿命', `<b>${s.foamLife}</b> 秒`) +
+      row('核生成サイト', `<b>${s.siteDensity}</b> 個/cm²`);
     $('tutorial').hidden = !sim.drink.tutorial;
   }
 
@@ -109,6 +151,7 @@
   let settings = readSettings();
   const game = new P.Game(settings);
   const renderer = new window.SceneRenderer($('scene'));
+  const axes = new window.ControlAxes($('axes'), $('stage'), CONTROL_MAP);
   const charts = new window.HistoryCharts($('chartVol'), $('chartFlow'), $('chartTip'));
   const budget = new window.BudgetBar($('budgetBar'), $('budgetLegend'));
   updateOutputs(settings, game.sim);
@@ -150,17 +193,30 @@
   });
   $('restartBtn').addEventListener('click', restart);
   $('againBtn').addEventListener('click', restart);
-  $('helpBtn').addEventListener('click', () => {
-    const open = $('helpPanel').hidden;
-    $('helpPanel').hidden = !open;
-    $('helpBtn').setAttribute('aria-expanded', String(open));
+  // 遊び方(モーダル)。Esc・✕・外側のクリックで閉じる
+  const help = $('helpPanel');
+  $('helpBtn').addEventListener('click', () => help.showModal());
+  $('helpClose').addEventListener('click', () => help.close());
+  help.addEventListener('click', (e) => {
+    if (e.target === help) help.close(); // 余白(::backdrop)を押したとき
   });
   let speed = 1;
   $('speed').addEventListener('change', () => (speed = +$('speed').value));
 
   // ---------- 入力 ----------
-  const input = { active: false, ux: 0.3, uy: 0.5, mouth: 0.015, key: false };
+  // hover: マウスが画面の上にある(押す前でも、押したらどの傾きになるかを十字線で見せる)
+  const input = { active: false, hover: false, ux: 0.3, uy: 0.5, mouth: 0.015, key: false };
   const canvas = $('scene');
+  // 傾きの札を出すときに避ける、画面に重ねた表示の枠(キャンバス上の px)
+  const overlays = [...document.querySelectorAll('.stage .hud')];
+  const avoid = () => {
+    const r = canvas.getBoundingClientRect();
+    return overlays.map((el) => {
+      const b = el.getBoundingClientRect();
+      return { x0: b.left - r.left - 4, x1: b.right - r.left + 4, y0: b.top - r.top - 4, y1: b.bottom - r.top + 4 };
+    });
+  };
+  renderer.ctrl = { map: CONTROL_MAP, input, avoid };
   function setPos(e) {
     const r = canvas.getBoundingClientRect();
     input.ux = clamp((e.clientX - r.left) / r.width, 0, 1);
@@ -180,8 +236,10 @@
     e.preventDefault();
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (input.active) setPos(e);
+    if (e.pointerType === 'mouse') input.hover = true;
+    if (input.active || e.pointerType === 'mouse') setPos(e);
   });
+  canvas.addEventListener('pointerleave', () => (input.hover = false));
   const release = () => {
     input.active = false;
     canvas.classList.remove('holding');
@@ -206,6 +264,7 @@
   setMouth(1.5);
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (help.open) return;
     if (e.key === 'r' || e.key === 'R') restart();
     else if (e.key === ' ') {
       if (game.state === 'done' || game.state === 'failed') return;
@@ -229,25 +288,38 @@
   function controls() {
     const sim = game.sim;
     if (!input.active) return { bottleTilt: 0, glassTilt: 0, mouthHeight: input.mouth };
-    // 液が口に届く角度(残量で変わる)の 14° 手前 〜 27° 先を画面の下端〜上端に割り当てる。
-    // 下から 1/3 あたりで出始め、上 1/5 ほどでゴボゴボ言う全開になる。
-    const bottleTilt = sim.onsetTilt() - 0.25 + input.uy * 0.72;
-    const gx = clamp((input.ux - 0.15) / 0.65, 0, 1);
-    return { bottleTilt, glassTilt: P.MAX_GLASS_TILT * gx, mouthHeight: input.mouth };
+    const bottleTilt = sim.onsetTilt() + CONTROL_MAP.bottleDeg(input.uy) / RAD;
+    return { bottleTilt, glassTilt: CONTROL_MAP.glassDeg(input.ux) / RAD, mouthHeight: input.mouth };
   }
 
   // ---------- 記録 ----------
   const settingsKey = (s) => JSON.stringify(Object.keys(s).sort().map((k) => [k, s[k]]));
-  const label = (s) => `${P.DRINKS[s.drink].name} ${s.liquidTemp}℃・${P.GLASSES[s.glass].name}${s.ice ? `・氷${s.ice}` : ''}`;
+  // 記録の表の「飲み物」「グラス」の欄。氷はグラスに入れるものなのでグラスの欄に書く
+  const drinkLabel = (s) => `${P.DRINKS[s.drink].name} ${s.liquidTemp}℃`;
+  const glassLabel = (s) => `${P.GLASSES[s.glass].name} ${s.glassTemp}℃${s.ice ? `・氷${s.ice}` : ''}`;
+  // 以前の記録は「コーラ 5℃・タンブラー・氷1」の 1 つの文字列(グラスの温度なし)なので、最初の「・」で分ける
+  const recordCols = (r) => {
+    if (r.drink !== undefined) return [r.drink, r.glass];
+    const i = (r.label || '').indexOf('・');
+    return i < 0 ? [r.label || '', ''] : [r.label.slice(0, i), r.label.slice(i + 1)];
+  };
+  // 欄が狭いので折り返すが、「ビアグラス」「20℃」「氷2」のそれぞれの途中では折り返さない
+  const keepWords = (text) => text.replace(/[^ ・]+/g, (w) => `<span class="nw">${w}</span>`);
   function showRecords() {
     const best = store.get(BEST_KEY, {})[settingsKey(settings)];
     $('bestLine').innerHTML = best
       ? `この条件のベスト: <b>${best.record.toFixed(2)} 秒</b>(こぼれ ${best.spill.toFixed(1)} mL)`
       : 'この条件のベスト: —';
     const recent = store.get(RECENT_KEY, []);
-    $('recent').innerHTML = recent
-      .map((r) => `<li><b>${r.ok ? `${r.record.toFixed(2)} 秒` : '失敗'}</b> ${r.label}${r.ok ? `(こぼれ ${r.spill.toFixed(1)} mL)` : ''}</li>`)
-      .join('');
+    $('recent').innerHTML = recent.length
+      ? recent
+          .map(
+            (r) =>
+              `<tr${r.ok ? '' : ' class="failed"'}><td class="num">${r.ok ? r.record.toFixed(2) : '失敗'}</td>` +
+              `<td>${recordCols(r).map(keepWords).join('</td><td>')}</td><td class="num">${r.spill.toFixed(1)}</td></tr>`,
+          )
+          .join('')
+      : '<tr><td colspan="4" class="empty">まだ記録はありません</td></tr>';
   }
   showRecords();
 
@@ -282,7 +354,7 @@
       $('resFoam').textContent = `${(game.foamMax * 1000).toFixed(0)} mm`;
     }
     const recent = store.get(RECENT_KEY, []);
-    recent.unshift({ ok: r.ok, record: r.record || 0, spill: r.spill, label: label(settings) });
+    recent.unshift({ ok: r.ok, record: r.record || 0, spill: r.spill, drink: drinkLabel(settings), glass: glassLabel(settings) });
     store.set(RECENT_KEY, recent.slice(0, 8));
     showRecords();
     $('result').hidden = false;
@@ -290,12 +362,10 @@
   }
 
   // ---------- HUD ----------
-  const PHASE = { ready: '準備OK', pouring: '注いでいます', settling: '泡を見届け中…', done: '結果', failed: '失敗' };
   const MODE = { plunge: '直接', film: '壁伝い', filmBottom: '壁伝い', bottom: '底に衝突' };
   function updateHud() {
     const sim = game.sim;
     const st = sim.stats();
-    $('phase').textContent = PHASE[game.state];
     $('hudTime').textContent = (game.finishTime != null ? game.finishTime : game.time).toFixed(2);
     $('hudLiquid').textContent = Math.round(st.VL * 1e6);
     $('hudTarget').textContent = Math.round(sim.targetVolume * 1e6);
@@ -315,11 +385,17 @@
   // ---------- ループ ----------
   function resize() {
     renderer.resize();
+    axes.draw();
     charts.resize();
   }
   window.addEventListener('resize', resize);
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  if (mq.addEventListener) mq.addEventListener('change', () => renderer.readTheme());
+  if (mq.addEventListener) {
+    mq.addEventListener('change', () => {
+      renderer.readTheme();
+      axes.draw();
+    });
+  }
   resize();
   updateHud();
 

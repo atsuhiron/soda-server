@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>物理モデル — Soda Server</title>
+    <meta name="description" content="Soda Server が泡の計算に使っている物理モデルと計算式の解説" />
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/physics.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <h1>物理モデル</h1>
+        <p>Soda Server が泡をどう計算しているか</p>
+      </div>
+      <a class="btn ghost" href="index.html">ゲームに戻る</a>
+    </header>
+
+    <main class="doc">
+      <p class="lead">
+        このゲームは、注いだ炭酸飲料の中で CO₂ がどこへ行くかを、1/240 秒刻みで計算しています。このページでは、その計算に使っている物理モデルと式を、実際のプログラム(<code>js/physics.js</code>)と同じ形で説明します。
+      </p>
+
+      <nav class="toc" aria-labelledby="tocTitle">
+        <h2 id="tocTitle">目次</h2>
+        <ol>
+          <li><a href="#overview">全体の流れ</a></li>
+          <li><a href="#dissolve">溶けている CO₂ と過飽和</a></li>
+          <li><a href="#props">液体の性質と温度</a></li>
+          <li><a href="#bottle">ボトルから出る量</a></li>
+          <li><a href="#stream">液柱と壁を伝う液膜</a></li>
+          <li><a href="#entrain">空気の巻き込みと乱れ</a></li>
+          <li><a href="#nucleation">壁と氷から出る泡</a></li>
+          <li><a href="#growth">気泡の成長</a></li>
+          <li><a href="#rise">気泡の上昇</a></li>
+          <li><a href="#surface">液面から抜ける CO₂</a></li>
+          <li><a href="#foam">泡の層</a></li>
+          <li><a href="#heat">温度の変化</a></li>
+          <li><a href="#overflow">グラスの容量とあふれ</a></li>
+          <li><a href="#controls">操作と記録</a></li>
+          <li><a href="#values">飲み物とグラスの値</a></li>
+          <li><a href="#refs">参考文献</a></li>
+        </ol>
+      </nav>
+
+      <!-- 1 -->
+      <section aria-labelledby="overview">
+        <h2 id="overview"><span class="num">1</span>全体の流れ</h2>
+        <p>
+          モデルは、報告書「炭酸飲料を注いだときの泡をシミュレートするために考慮すべき物理現象」の §9 にある <b>L1 モデル</b>をもとにしています。液体・気泡・泡の層を別々に持ち、その間の CO₂ と液のやり取りを計算します。
+        </p>
+        <p>1 ステップ(1/240 秒)では、次の順に計算します。</p>
+        <ol class="steps">
+          <li><a href="#controls">手の動き</a>: ボトルとグラスの傾きを、押している位置で決まる角度へ近づける</li>
+          <li><a href="#bottle">ボトル</a>: 傾けたボトルの液面と口の高さから流量を出す</li>
+          <li><a href="#stream">液柱</a>: 出た液を放物線で飛ばし、壁に当たれば液膜にする</li>
+          <li><a href="#entrain">巻き込み</a>: 液面に突っ込んだ液が空気を巻き込み、液をかき乱す</li>
+          <li><a href="#nucleation">核生成</a>: 濡れた壁と氷の表面から泡が出る</li>
+          <li><a href="#growth">成長</a>・<a href="#rise">上昇</a>: 気泡が CO₂ を吸って大きくなりながら昇る</li>
+          <li><a href="#surface">液面</a>: 液面から CO₂ が直接抜ける</li>
+          <li><a href="#foam">泡の層</a>: 液面に着いた気泡が泡になり、排液・破裂で減る</li>
+          <li><a href="#heat">熱</a>: 液とグラスの温度が近づく</li>
+          <li><a href="#overflow">あふれ</a>: 縁を超えた泡と液をこぼす</li>
+        </ol>
+
+        <h3>CO₂ の行き先</h3>
+        <p>CO₂ は次の 7 か所のどこかにあり、その合計はいつも最初にボトルに入っていた量と等しくなります(計算機の丸め誤差の範囲で保存)。</p>
+        <div class="flow" aria-label="CO₂ の流れ">
+          <span>ボトル</span><i>→</i><span>液柱</span><i>→</i><span>溶けたまま</span><i>→</i><span>液中の気泡</span><i>→</i><span>泡の中</span><i>→</i><span>大気へ</span>
+        </div>
+        <p>
+          ほかに、溶けたままの CO₂ が液面から直接大気へ抜ける経路と、縁からあふれて「こぼれ」になる経路があります。ゲームの下の「CO₂ 内訳」は、ボトルから注いだ分がこのうちどこにあるかを示しています。
+        </p>
+        <p class="muted">以下、特に書かない限り単位は SI(m、kg、s、mol、Pa、K)です。温度は式によって ℃ と K を使い分けます。</p>
+      </section>
+
+      <!-- 2 -->
+      <section aria-labelledby="dissolve">
+        <h2 id="dissolve"><span class="num">2</span>溶けている CO₂ と過飽和</h2>
+        <h3>溶けていられる量(ヘンリーの法則)</h3>
+        <p>
+          1 気圧の CO₂ のもとで水に溶けていられる量 <math><mi>s</mi><mo stretchy="false">(</mo><mi>T</mi><mo stretchy="false">)</mo></math> [g/L] は、次の表を直線で補間して求めます。表の範囲の外は、ファントホッフ型の式で延ばします。
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>液温</th><th class="n">0 ℃</th><th class="n">5 ℃</th><th class="n">10 ℃</th><th class="n">20 ℃</th><th class="n">25 ℃</th><th class="n">30 ℃</th></tr>
+            </thead>
+            <tbody>
+              <tr><th>溶けていられる量 [g/L]</th><td class="n">3.3</td><td class="n">2.9</td><td class="n">2.5</td><td class="n">1.7</td><td class="n">1.5</td><td class="n">1.3</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="eq">
+          <math display="block">
+            <mi>s</mi><mo stretchy="false">(</mo><mi>T</mi><mo stretchy="false">)</mo><mo>=</mo>
+            <mi>s</mi><mo stretchy="false">(</mo><msub><mi>T</mi><mtext>端</mtext></msub><mo stretchy="false">)</mo>
+            <mspace width="0.2em" />
+            <mi>exp</mi>
+            <mrow>
+              <mo>[</mo><mn>2400</mn>
+              <mrow><mo>(</mo><mfrac><mn>1</mn><mi>T</mi></mfrac><mo>−</mo><mfrac><mn>1</mn><msub><mi>T</mi><mtext>端</mtext></msub></mfrac><mo>)</mo></mrow>
+              <mo>]</mo>
+            </mrow>
+          </math>
+        </div>
+        <p>糖やアルコールは溶けていられる量を減らす(塩析)ので、飲み物ごとの係数 <math><mi>a</mi></math> を掛けます。ヘンリー定数と、1 気圧で溶けていられる濃度は</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>k</mi><mi>H</mi></msub><mo stretchy="false">(</mo><mi>T</mi><mo stretchy="false">)</mo><mo>=</mo>
+            <mfrac><mrow><mi>a</mi><mspace width="0.1em" /><mi>s</mi><mo stretchy="false">(</mo><mi>T</mi><mo stretchy="false">)</mo></mrow><mrow><msub><mi>M</mi><msub><mtext>CO</mtext><mn>2</mn></msub></msub><mspace width="0.1em" /><msub><mi>P</mi><mi>atm</mi></msub></mrow></mfrac>
+          </math>
+          <math display="block">
+            <msub><mi>C</mi><mi>eq</mi></msub><mo>=</mo><msub><mi>k</mi><mi>H</mi></msub><mspace width="0.1em" /><msub><mi>P</mi><mi>atm</mi></msub>
+          </math>
+        </div>
+        <dl class="where">
+          <dt><math><msub><mi>M</mi><msub><mtext>CO</mtext><mn>2</mn></msub></msub></math></dt><dd>CO₂ のモル質量 44.01 g/mol</dd>
+          <dt><math><msub><mi>P</mi><mi>atm</mi></msub></math></dt><dd>大気圧 101 325 Pa</dd>
+          <dt><math><msub><mi>C</mi><mi>eq</mi></msub></math></dt><dd>溶けていられる濃度 [mol/m³](画面の「飽和溶解 CO₂」)</dd>
+        </dl>
+
+        <h3>ボトルの中の濃度</h3>
+        <p>飲み物の炭酸の強さはガスボリューム(GV)で与えます。1 GV は液 1 L に 1 L の CO₂ が溶けている状態で、約 1.96 g/L です。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>C</mi><mtext>ボトル</mtext></msub><mo>=</mo>
+            <mfrac><mrow><mtext>GV</mtext><mo>×</mo><mn>1.96</mn><mspace width="0.2em" /><mtext>g/L</mtext></mrow><msub><mi>M</mi><msub><mtext>CO</mtext><mn>2</mn></msub></msub></mfrac>
+          </math>
+        </div>
+        <p>注いだ液はこの濃度の CO₂ を持ってグラスに入ります。ボトルの中では CO₂ は抜けないものとしています。</p>
+
+        <h3>過飽和度</h3>
+        <p>グラスの液に溶けている濃度 <math><msub><mi>C</mi><mi>L</mi></msub></math> が、溶けていられる濃度をどれだけ超えているかを過飽和度 <math><mi>S</mi></math> とします。</p>
+        <div class="eq">
+          <math display="block">
+            <mi>S</mi><mo>=</mo><mfrac><msub><mi>C</mi><mi>L</mi></msub><msub><mi>C</mi><mi>eq</mi></msub></mfrac><mo>−</mo><mn>1</mn>
+          </math>
+        </div>
+        <p>
+          たとえば 5 ℃ のコーラ(3.5 GV、塩析係数 0.95)は <math><msub><mi>C</mi><mi>L</mi></msub></math> = 6.86 g/L、<math><msub><mi>C</mi><mi>eq</mi></msub></math> = 2.9 × 0.95 = 2.755 g/L なので <math><mi>S</mi></math> ≈ 1.49 です。<math><mi>S</mi></math> が 0 より大きい間は、液から CO₂ が出ていこうとします。
+        </p>
+      </section>
+
+      <!-- 3 -->
+      <section aria-labelledby="props">
+        <h2 id="props"><span class="num">3</span>液体の性質と温度</h2>
+        <p>気泡の成長や上昇の速さを決める性質は、液温で変わります。飲み物の違いは、水に対する倍率や 25 ℃ での値で与えます。</p>
+        <h3>粘度</h3>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>μ</mi><mi>w</mi></msub><mo stretchy="false">(</mo><mi>T</mi><mo stretchy="false">)</mo><mo>=</mo><mn>2.414</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup>
+            <mo>×</mo><msup><mn>10</mn><mfrac><mn>247.8</mn><mrow><mi>T</mi><mo>−</mo><mn>140</mn></mrow></mfrac></msup>
+          </math>
+          <math display="block">
+            <mi>μ</mi><mo>=</mo><msub><mi>f</mi><mi>μ</mi></msub><mspace width="0.1em" /><msub><mi>μ</mi><mi>w</mi></msub>
+          </math>
+        </div>
+        <p><math><msub><mi>μ</mi><mi>w</mi></msub></math> は水の粘度 [Pa·s]、<math><mi>T</mi></math> は K です。5 ℃ で 1.50 mPa·s、25 ℃ で 0.89 mPa·s になります。<math><msub><mi>f</mi><mi>μ</mi></msub></math> は飲み物の粘度倍率(コーラ 1.25 など)です。</p>
+        <h3>CO₂ の拡散係数</h3>
+        <div class="eq">
+          <math display="block">
+            <mi>D</mi><mo stretchy="false">(</mo><mi>T</mi><mo stretchy="false">)</mo><mo>=</mo><mn>1.9</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>9</mn></mrow></msup>
+            <mo>×</mo><mfrac><mi>T</mi><mn>298.15</mn></mfrac>
+            <mo>×</mo><mfrac><mrow><msub><mi>μ</mi><mi>w</mi></msub><mo stretchy="false">(</mo><mn>298.15</mn><mo stretchy="false">)</mo></mrow><mrow><msub><mi>μ</mi><mi>w</mi></msub><mo stretchy="false">(</mo><mi>T</mi><mo stretchy="false">)</mo></mrow></mfrac>
+            <mo>×</mo><mfrac><mn>1</mn><msqrt><msub><mi>f</mi><mi>μ</mi></msub></msqrt></mfrac>
+          </math>
+        </div>
+        <p>25 ℃ の値 1.9×10⁻⁹ m²/s を、ストークス–アインシュタインの関係(温度に比例し粘度に反比例)で他の温度へ延ばしています。糖による粘度の上昇は平方根で効かせます。5 ℃ の水で 1.05×10⁻⁹ m²/s です。</p>
+        <h3>表面張力</h3>
+        <div class="eq">
+          <math display="block">
+            <mi>σ</mi><mo stretchy="false">(</mo><mi>T</mi><mo stretchy="false">)</mo><mo>=</mo><msub><mi>σ</mi><mn>25</mn></msub><mo>−</mo><mn>1.5</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup><mo>×</mo><mo stretchy="false">(</mo><mi>T</mi><mo>−</mo><mn>25</mn><mo stretchy="false">)</mo>
+          </math>
+        </div>
+        <p>ここでは <math><mi>T</mi></math> は ℃ です。<math><msub><mi>σ</mi><mn>25</mn></msub></math> は飲み物ごとの 25 ℃ での値(水 0.072 N/m、ビール 0.044 N/m など)です。</p>
+      </section>
+
+      <!-- 4 -->
+      <section aria-labelledby="bottle">
+        <h2 id="bottle"><span class="num">4</span>ボトルから出る量</h2>
+        <h3>傾けた容器の液面</h3>
+        <p>
+          ボトルとグラスは、どちらも高さ方向に半径が変わる回転体(軸対称の容器)として扱います。容器を高さ方向に薄く輪切りにし(ボトルは 96 枚、グラスは 64 枚)、傾けたときに各輪切りの円が液面で切られる部分の面積を、解析的に積分して体積を出します。
+        </p>
+        <p>半径 <math><mi>r</mi></math> の円を、中心から <math><mi>u</mi></math> の位置の直線で切ったとき、その先にある部分(弓形)の面積は</p>
+        <div class="eq">
+          <math display="block">
+            <mi>A</mi><mo stretchy="false">(</mo><mi>r</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo><mo>=</mo>
+            <msup><mi>r</mi><mn>2</mn></msup><mspace width="0.1em" /><mi>arccos</mi><mfrac><mi>u</mi><mi>r</mi></mfrac>
+            <mo>−</mo><mi>u</mi><msqrt><msup><mi>r</mi><mn>2</mn></msup><mo>−</mo><msup><mi>u</mi><mn>2</mn></msup></msqrt>
+          </math>
+        </div>
+        <p>
+          容器を角度 <math><mi>φ</mi></math> だけ傾け、液面の高さを <math><mi>L</mi></math> とすると、軸に沿った位置 <math><mi>z</mi></math> の輪切りは <math><mi>u</mi><mo>=</mo><mo stretchy="false">(</mo><mi>z</mi><mi>cos</mi><mi>φ</mi><mo>−</mo><mi>L</mi><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false" lspace="0" rspace="0">|</mo><mi>sin</mi><mi>φ</mi><mo stretchy="false" lspace="0" rspace="0">|</mo></math> の位置で切られます。これを <math><mi>z</mi></math> について積分すれば液面より下の体積 <math><mi>V</mi><mo stretchy="false">(</mo><mi>L</mi><mo stretchy="false">)</mo></math> が出ます。逆に、液の体積から液面の高さを求めるときは、ニュートン法と二分法を組み合わせて解きます。
+        </p>
+
+        <h3>流量</h3>
+        <p>
+          ボトルの口(半径 <math><msub><mi>r</mi><mi>m</mi></msub></math> = 11 mm)のいちばん低い点より液面が高くなると、液が出始めます。口の高さの範囲 <math><mi>w</mi><mo>=</mo><mn>2</mn><msub><mi>r</mi><mi>m</mi></msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mi>sin</mi><mi>φ</mi><mo stretchy="false" lspace="0" rspace="0">|</mo></math> のうち、液面がどこまで来ているかで流量が決まります。
+        </p>
+        <div class="eq">
+          <math display="block">
+            <mi>Q</mi><mo>=</mo><mn>0.5</mn><msqrt><mi>g</mi><msup><mi>d</mi><mn>5</mn></msup></msqrt>
+            <mo>×</mo><msup><mi>f</mi><mn>1.6</mn></msup>
+            <mo>×</mo><mrow><mo>(</mo><mn>1</mn><mo>+</mo><mn>0.15</mn><mspace width="0.1em" /><mi>clamp</mi><mrow><mo>(</mo><mfrac><mrow><mi>h</mi><mo>−</mo><mi>w</mi></mrow><mrow><mn>0.04</mn><mspace width="0.3em" /><mtext>m</mtext></mrow></mfrac><mo>,</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo>)</mo></mrow><mo>)</mo></mrow>
+          </math>
+          <math display="block">
+            <mi>f</mi><mo>=</mo><mi>min</mi><mrow><mo>(</mo><mn>1</mn><mo>,</mo><mfrac><mi>h</mi><mi>w</mi></mfrac><mo>)</mo></mrow>
+          </math>
+        </div>
+        <dl class="where">
+          <dt><math><mi>h</mi></math></dt><dd>液面と、口のいちばん低い点との高さの差</dd>
+          <dt><math><mi>d</mi></math></dt><dd>口の直径 22 mm。<math><mn>0.5</mn><msqrt><mi>g</mi><msup><mi>d</mi><mn>5</mn></msup></msqrt></math> ≈ 112 mL/s が、口がふさがったとき(ゴボゴボ言うとき)の流量の目安</dd>
+          <dt><math><mi>f</mi></math></dt><dd>口のうち液に浸かっている割合</dd>
+        </dl>
+        <p>
+          口が全部液に浸かると(<math><mi>f</mi><mo>=</mo><mn>1</mn></math>)空気が逆流してゴボゴボ言うので、流量を 5.5 Hz で ±12 % 揺らします。液が出る速さは <math><msub><mi>v</mi><mn>0</mn></msub><mo>=</mo><mi>Q</mi><mo>/</mo><mo stretchy="false">(</mo><mi>π</mi><msubsup><mi>r</mi><mi>m</mi><mn>2</mn></msubsup><mi>max</mi><mo stretchy="false">(</mo><mn>0.12</mn><mo>,</mo><mn>0.55</mn><mi>f</mi><mo stretchy="false">)</mo><mo stretchy="false">)</mo></math> とし、0.08〜1.2 m/s の範囲に収めます。
+        </p>
+        <div class="note">
+          <b>画面の縦軸の 0°</b>: 液が口に届き始める傾き(満杯の 500 mL ボトルで約 69°)を毎回ここから求めています。ボトルの中身が減るとこの角度は深くなるので、画面の縦軸の 0° は、いつでも「ちょうど出始める角度」を指します。
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section aria-labelledby="stream">
+        <h2 id="stream"><span class="num">5</span>液柱と壁を伝う液膜</h2>
+        <p>
+          ボトルから出た液は、少量ずつの「液のかたまり」に分けて追跡します。かたまりは重力だけを受けて放物線を描き、グラスの縁の内側に入るか、外側に当たってこぼれるかを判定します。
+        </p>
+        <p>グラスの内壁に当たったとき、壁が鉛直から 7° 以上寝ていれば(グラスを傾けているとき)、液は壁に貼り付いた液膜になって伝い落ちます。液膜の速さ <math><mi>v</mi></math> は、壁に沿った重力と摩擦の釣り合いで決まります。</p>
+        <div class="eq">
+          <math display="block">
+            <mfrac><mrow><mi>d</mi><mi>v</mi></mrow><mrow><mi>d</mi><mi>t</mi></mrow></mfrac><mo>=</mo><msub><mi>g</mi><mo>∥</mo></msub><mo>−</mo><mfrac><mi>v</mi><msub><mi>τ</mi><mi>f</mi></msub></mfrac>
+          </math>
+          <math display="block">
+            <msub><mi>τ</mi><mi>f</mi></msub><mo>=</mo><mn>0.12</mn><mspace width="0.3em" /><mtext>s</mtext>
+          </math>
+        </div>
+        <p>
+          かたまりが液面に着いたとき(液柱なら液面に突っ込んだとき、液膜なら壁伝いに液面に入ったとき)、液と CO₂ をグラスの液に加え、次の節の巻き込みと乱れを計算します。そのときの速さ <math><mi>v</mi></math> が画面右上の「突入速度」です。液膜は液面に斜めに滑り込むので、液面に効く速さは小さくなります。
+        </p>
+      </section>
+
+      <!-- 6 -->
+      <section aria-labelledby="entrain">
+        <h2 id="entrain"><span class="num">6</span>空気の巻き込みと乱れ</h2>
+        <h3>巻き込む空気の量</h3>
+        <p>液柱が液面に突っ込むと空気を巻き込みます。巻き込む空気と液の体積の比 <math><mi>β</mi></math> は、Biń (1993) の経験式をもとにしています。</p>
+        <div class="eq">
+          <math display="block">
+            <mi>β</mi><mo>=</mo><mfrac><msub><mi>Q</mi><mi>air</mi></msub><mi>Q</mi></mfrac><mo>=</mo>
+            <mn>0.04</mn><mspace width="0.1em" /><msubsup><mi>Fr</mi><mn>0</mn><mn>0.28</mn></msubsup>
+            <msup><mrow><mo>(</mo><mfrac><msub><mi>L</mi><mi>j</mi></msub><msub><mi>d</mi><mn>0</mn></msub></mfrac><mo>)</mo></mrow><mn>0.4</mn></msup>
+            <mo>×</mo><mi>ramp</mi><mo stretchy="false">(</mo><mi>v</mi><mo stretchy="false">)</mo>
+          </math>
+          <math display="block">
+            <msub><mi>Fr</mi><mn>0</mn></msub><mo>=</mo><mfrac><msubsup><mi>v</mi><mn>0</mn><mn>2</mn></msubsup><mrow><mi>g</mi><msub><mi>d</mi><mn>0</mn></msub></mrow></mfrac>
+          </math>
+          <math display="block">
+            <msub><mi>d</mi><mn>0</mn></msub><mo>=</mo><msqrt><mfrac><mrow><mn>4</mn><mi>Q</mi></mrow><mrow><mi>π</mi><msub><mi>v</mi><mn>0</mn></msub></mrow></mfrac></msqrt>
+          </math>
+        </div>
+        <dl class="where">
+          <dt><math><msub><mi>v</mi><mn>0</mn></msub><mo>,</mo><msub><mi>d</mi><mn>0</mn></msub></math></dt><dd>ボトルの口から出たときの液の速さと液柱の太さ(Biń の式はノズルの出口の値で整理されている)</dd>
+          <dt><math><msub><mi>L</mi><mi>j</mi></msub></math></dt><dd>液柱が液面に着くまでに進んだ長さ</dd>
+          <dt><math><mi>ramp</mi><mo stretchy="false">(</mo><mi>v</mi><mo stretchy="false">)</mo></math></dt><dd>突入速度 <math><mi>v</mi></math> が 0.6 m/s から 1.4 m/s に上がる間に 0 から 1 へなめらかに上がる関数(<i>smoothstep</i>)。遅く入る液はほとんど空気を巻き込まない</dd>
+        </dl>
+        <p>これに、注ぎ方による倍率を掛けます。</p>
+        <ul>
+          <li><b>壁を伝わせたとき</b>: 薄い液膜は巻き込みにくいので、流量が 35 mL/s 以下なら 0.08 倍。流量が増えて液膜が厚く乱れると上がり、110 mL/s 以上で 0.6 倍。</li>
+          <li><b>氷に当たって砕けた液柱</b>: 2 倍。</li>
+          <li><b>液が浅いとき</b>: 底に当たって飛び散るので、液の深さが 12 mm 以下なら最大 2.5 倍(深さ 0 で 2.5 倍、12 mm で 1 倍)。</li>
+          <li><b>ゴボゴボ言っているとき</b>: 液柱が空気を抱えて出てくるので、液量の 4 %(液膜なら 2 %)を足す。</li>
+          <li>全体に校正値 1.5 と「詳しいパラメータ」の「空気の巻き込み倍率」を掛け、1 を上限とする。</li>
+        </ul>
+        <h3>巻き込んだ気泡の深さと大きさ</h3>
+        <p>巻き込んだ空気は、液面から次の深さ <math><msub><mi>z</mi><mi>p</mi></msub></math> [m] までの間に気泡として置きます(液膜のときは 0.35 倍、液の深さが上限)。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>z</mi><mi>p</mi></msub><mo>=</mo><mn>2.1</mn><mspace width="0.1em" /><msup><mrow><mo>(</mo><mi>v</mi><mi>d</mi><mo>)</mo></mrow><mn>0.775</mn></msup>
+          </math>
+        </div>
+        <p><math><mi>d</mi></math> は液面に着いたときの液柱の太さです。気泡の直径は、体積で数えて中央値 0.8 mm、対数標準偏差 0.75 の対数正規分布を、0.1〜4 mm の 7 段階に分けて与えます。巻き込んだ気泡は最初は空気だけで、CO₂ を含みません(<a href="#growth">気泡の成長</a>で CO₂ を吸います)。</p>
+        <h3>乱れ</h3>
+        <p>液面に入った液の運動エネルギーを、液の「乱れ」としてためます(液膜で入ったときは小さく、液が浅いときは大きくします)。</p>
+        <div class="eq">
+          <math display="block">
+            <mi>Δ</mi><mi>E</mi><mo>=</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><mi>ρ</mi><mspace width="0.1em" /><mi>Δ</mi><mi>V</mi><mspace width="0.1em" /><msup><mi>v</mi><mn>2</mn></msup>
+          </math>
+          <math display="block">
+            <mi>I</mi><mo>=</mo><mfrac><mi>E</mi><mrow><mi>E</mi><mo>+</mo><mn>0.02</mn><mspace width="0.3em" /><mtext>J</mtext></mrow></mfrac>
+          </math>
+        </div>
+        <p>
+          ためたエネルギー <math><mi>E</mi></math> は時定数 0.8 秒で減ります。乱れ <math><mi>I</mi></math>(0〜1)は、液面から CO₂ が抜ける速さと気泡のふらつきを大きくします。また、乱流の渦の中で過飽和の CO₂ が微小な気泡核(半径 18 μm)を作るとして、<math><mi>N</mi><mo>=</mo><mn>4.5</mn><mo>×</mo><msup><mn>10</mn><mn>6</mn></msup><mo>×</mo><mi>Δ</mi><mi>E</mi><mo>×</mo><mi>S</mi></math> 個の気泡を加えます。
+        </p>
+      </section>
+
+      <!-- 7 -->
+      <section aria-labelledby="nucleation">
+        <h2 id="nucleation"><span class="num">7</span>壁と氷から出る泡</h2>
+        <p>
+          過飽和の液の中でも、泡はなにもない所からは生まれません。グラスの傷や拭いた布の繊維などに閉じ込められた小さな気体のポケット(核生成サイト)から、決まった周期で泡が離れていきます。1 つのサイトから泡が出る頻度は、CO₂ が拡散してきて泡が離脱する大きさ <math><msub><mi>R</mi><mi>d</mi></msub></math> になるまでの時間で決まるとします。
+        </p>
+        <div class="eq">
+          <math display="block">
+            <mi>f</mi><mo>=</mo><mfrac><mrow><mi>D</mi><mspace width="0.1em" /><mi>Δ</mi><mi>C</mi></mrow><mrow><msub><mi>ρ</mi><mi>g</mi></msub><mspace width="0.1em" /><msubsup><mi>R</mi><mi>d</mi><mn>2</mn></msubsup></mrow></mfrac>
+          </math>
+          <math display="block">
+            <mi>Δ</mi><mi>C</mi><mo>=</mo><msub><mi>C</mi><mi>L</mi></msub><mo>−</mo><msub><mi>C</mi><mi>eq</mi></msub><mo stretchy="false">(</mo><msub><mi>T</mi><mi>w</mi></msub><mo stretchy="false">)</mo>
+          </math>
+          <math display="block">
+            <msub><mi>ρ</mi><mi>g</mi></msub><mo>=</mo><mfrac><msub><mi>P</mi><mi>atm</mi></msub><mrow><msub><mi>R</mi><mi>gas</mi></msub><msub><mi>T</mi><mi>w</mi></msub></mrow></mfrac>
+          </math>
+        </div>
+        <dl class="where">
+          <dt><math><msub><mi>R</mi><mi>d</mi></msub></math></dt><dd>離脱半径。25 μm を表面張力で補正(<math><msup><mrow><mo>(</mo><mi>σ</mi><mo>/</mo><mn>0.07</mn><mo>)</mo></mrow><mrow><mn>1</mn><mo>/</mo><mn>3</mn></mrow></msup></math> 倍)</dd>
+          <dt><math><msub><mi>ρ</mi><mi>g</mi></msub></math></dt><dd>泡の中の CO₂ のモル密度(理想気体)</dd>
+          <dt><math><msub><mi>T</mi><mi>w</mi></msub></math></dt><dd>壁の近くの液の温度(下の「壁の温度」)</dd>
+        </dl>
+        <p>5 ℃ のコーラでは、壁が液温と同じなら <math><mi>f</mi></math> ≈ 3.3 Hz、20 ℃ のグラスに触れた直後の壁際では約 4.8 Hz です。グラス全体から出る泡の数は、液に浸かっている壁の面積とサイトの密度 <math><msub><mi>n</mi><mi>s</mi></msub></math> を掛けて足し合わせます。</p>
+        <div class="eq">
+          <math display="block">
+            <mover><mi>N</mi><mo>˙</mo></mover><mo>=</mo><msub><mi>n</mi><mi>s</mi></msub><munder><mo>∑</mo><mi>i</mi></munder><msub><mi>A</mi><mrow><mtext>濡れ</mtext><mo>,</mo><mi>i</mi></mrow></msub><mspace width="0.1em" /><mi>f</mi><mo stretchy="false">(</mo><msub><mi>T</mi><mrow><mi>w</mi><mo>,</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo>
+          </math>
+        </div>
+        <p>
+          <math><msub><mi>n</mi><mi>s</mi></msub></math> は「グラスの表面」で決まり、洗って自然乾燥 1、布で拭いた 8、細かい傷が多い 25 個/cm² です。プラカップはガラスより表面が粗いので 3 倍にします(「詳しいパラメータ」の「核生成サイト密度」で直接変えられます)。
+        </p>
+        <h3>壁の温度</h3>
+        <p>
+          冷えた液が常温のグラスに触れると、壁際の薄い液だけが温まって溶けていられる量が減り、泡が出やすくなります。触れた瞬間の温度は、液とグラスの熱浸透率 <math><mi>e</mi><mo>=</mo><msqrt><mi>k</mi><mi>ρ</mi><mi>c</mi></msqrt></math> の比で決まる接触温度とし、その後は濡れてからの時間で液温に近づけます。
+        </p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>T</mi><mi>w</mi></msub><mo>=</mo><msub><mi>T</mi><mi>L</mi></msub><mo>+</mo>
+            <msub><mi>w</mi><mn>0</mn></msub><mspace width="0.1em" /><msup><mi>e</mi><mrow><mo>−</mo><msub><mi>t</mi><mtext>濡れ</mtext></msub><mo>/</mo><msub><mi>τ</mi><mi>w</mi></msub></mrow></msup>
+            <mo stretchy="false">(</mo><msub><mi>T</mi><mi>g</mi></msub><mo>−</mo><msub><mi>T</mi><mi>L</mi></msub><mo stretchy="false">)</mo>
+          </math>
+          <math display="block">
+            <msub><mi>w</mi><mn>0</mn></msub><mo>=</mo><mfrac><msub><mi>e</mi><mtext>グラス</mtext></msub><mrow><msub><mi>e</mi><mtext>グラス</mtext></msub><mo>+</mo><msub><mi>e</mi><mtext>水</mtext></msub></mrow></mfrac>
+          </math>
+        </div>
+        <p>熱浸透率は水 1580、ガラス 1450、プラスチック 550 なので、<math><msub><mi>w</mi><mn>0</mn></msub></math> はガラスで 0.48、プラスチックで 0.26 です。<math><msub><mi>τ</mi><mi>w</mi></msub></math> はガラス 15 秒、薄いプラスチック 1.5 秒としています。グラスの輪切りごとに、濡れてからの時間 <math><msub><mi>t</mi><mtext>濡れ</mtext></msub></math> を数えています。</p>
+        <h3>氷</h3>
+        <p>氷の表面は凹凸が多く、サイト密度を 400 個/cm² とします。液に浸かっている部分の表面積(1 個あたり最大 6<math><msup><mi>a</mi><mn>2</mn></msup></math>、<math><mi>a</mi></math> は氷の一辺)に、液温での <math><mi>f</mi></math> を掛けて泡を出します。</p>
+      </section>
+
+      <!-- 8 -->
+      <section aria-labelledby="growth">
+        <h2 id="growth"><span class="num">8</span>気泡の成長</h2>
+        <p>
+          気泡は 1 個ずつではなく、「同じ大きさ・同じ中身の気泡 <math><mi>N</mi></math> 個の束」として追跡します(最大 9000 束)。束ごとに、気泡 1 個が持つ CO₂ <math><msub><mi>n</mi><mi>C</mi></msub></math> と空気 <math><msub><mi>n</mi><mi>A</mi></msub></math> [mol] を持ちます。
+        </p>
+        <p>過飽和の液から気泡への CO₂ の流れ込みは、Epstein–Plesset 型の拡散の式で計算します。</p>
+        <div class="eq">
+          <math display="block">
+            <mfrac><mrow><mi>d</mi><msub><mi>n</mi><mi>C</mi></msub></mrow><mrow><mi>d</mi><mi>t</mi></mrow></mfrac><mo>=</mo>
+            <mn>4</mn><mi>π</mi><msup><mi>R</mi><mn>2</mn></msup><mspace width="0.1em" />
+            <mfrac><mrow><mi>Sh</mi><mspace width="0.1em" /><mi>D</mi></mrow><mrow><mn>2</mn><mi>R</mi></mrow></mfrac>
+            <mo stretchy="false">(</mo><msub><mi>C</mi><mi>L</mi></msub><mo>−</mo><msub><mi>C</mi><mi>s</mi></msub><mo stretchy="false">)</mo>
+          </math>
+          <math display="block">
+            <msub><mi>C</mi><mi>s</mi></msub><mo>=</mo><msub><mi>k</mi><mi>H</mi></msub><mspace width="0.1em" /><mi>x</mi><mspace width="0.1em" /><mi>p</mi>
+          </math>
+          <math display="block">
+            <mi>x</mi><mo>=</mo><mfrac><msub><mi>n</mi><mi>C</mi></msub><mrow><msub><mi>n</mi><mi>C</mi></msub><mo>+</mo><msub><mi>n</mi><mi>A</mi></msub></mrow></mfrac>
+          </math>
+          <math display="block">
+            <mi>p</mi><mo>=</mo><msub><mi>P</mi><mi>atm</mi></msub><mo>+</mo><mi>ρ</mi><mi>g</mi><mi>h</mi><mo>+</mo><mfrac><mrow><mn>2</mn><mi>σ</mi></mrow><mi>R</mi></mfrac>
+          </math>
+        </div>
+        <dl class="where">
+          <dt><math><msub><mi>C</mi><mi>s</mi></msub></math></dt><dd>気泡の表面で溶けていられる濃度。泡の中の CO₂ の分圧 <math><mi>x</mi><mi>p</mi></math> で決まる</dd>
+          <dt><math><mi>p</mi></math></dt><dd>気泡の中の圧力。大気圧に、深さ <math><mi>h</mi></math> の水圧と表面張力による圧力(ラプラス圧)を足したもの</dd>
+          <dt><math><mi>Sh</mi></math></dt><dd>シャーウッド数(下の式)。気泡が昇りながら新しい液に触れる効果</dd>
+        </dl>
+        <p>巻き込んだ空気の泡は最初 <math><mi>x</mi><mo>=</mo><mn>0</mn></math> なので、CO₂ をどんどん吸って膨らみます。シャーウッド数は Ranz–Marshall の式です。</p>
+        <div class="eq">
+          <math display="block">
+            <mi>Sh</mi><mo>=</mo><mn>2</mn><mo>+</mo><mn>0.6</mn><mspace width="0.1em" /><msup><mi>Re</mi><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><msup><mi>Sc</mi><mrow><mn>1</mn><mo>/</mo><mn>3</mn></mrow></msup>
+          </math>
+          <math display="block">
+            <mi>Re</mi><mo>=</mo><mfrac><mrow><mi>ρ</mi><mi>U</mi><mi>d</mi></mrow><mi>μ</mi></mfrac>
+          </math>
+          <math display="block">
+            <mi>Sc</mi><mo>=</mo><mfrac><mi>μ</mi><mrow><mi>ρ</mi><mi>D</mi></mrow></mfrac>
+          </math>
+        </div>
+        <p>気泡の大きさは、中の気体の量から理想気体の式で求め直します。</p>
+        <div class="eq">
+          <math display="block">
+            <mfrac><mn>4</mn><mn>3</mn></mfrac><mi>π</mi><msup><mi>R</mi><mn>3</mn></msup><mo>=</mo>
+            <mfrac><mrow><mo>(</mo><msub><mi>n</mi><mi>C</mi></msub><mo>+</mo><msub><mi>n</mi><mi>A</mi></msub><mo>)</mo><mspace width="0.1em" /><msub><mi>R</mi><mi>gas</mi></msub><mi>T</mi></mrow><mi>p</mi></mfrac>
+          </math>
+        </div>
+        <p>半径が 1.5 μm より小さくなった気泡は溶けきったとして、中の CO₂ を液に戻します。気泡が奪った CO₂ はそのまま液から引くので、CO₂ の合計は変わりません。</p>
+      </section>
+
+      <!-- 9 -->
+      <section aria-labelledby="rise">
+        <h2 id="rise"><span class="num">9</span>気泡の上昇</h2>
+        <p>気泡は浮力と抵抗の釣り合う速さ(終端速度)で昇るとします。炭酸飲料の気泡は表面が界面活性成分で覆われ、剛体の球に近く振る舞うので、Schiller–Naumann の抵抗係数を使います。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>C</mi><mi>d</mi></msub><mo>=</mo>
+            <mrow><mo>{</mo>
+              <mtable columnalign="left">
+                <mtr><mtd><mfrac><mn>24</mn><mi>Re</mi></mfrac><mo stretchy="false">(</mo><mn>1</mn><mo>+</mo><mn>0.15</mn><mspace width="0.1em" /><msup><mi>Re</mi><mn>0.687</mn></msup><mo stretchy="false">)</mo></mtd><mtd><mo stretchy="false">(</mo><mi>Re</mi><mo>&lt;</mo><mn>1000</mn><mo stretchy="false">)</mo></mtd></mtr>
+                <mtr><mtd><mn>0.44</mn></mtd><mtd><mo stretchy="false">(</mo><mi>Re</mi><mo>≥</mo><mn>1000</mn><mo stretchy="false">)</mo></mtd></mtr>
+              </mtable>
+            </mrow>
+          </math>
+          <math display="block">
+            <msub><mi>U</mi><mi>SN</mi></msub><mo>=</mo><msqrt><mfrac><mrow><mn>4</mn><mspace width="0.1em" /><mi>Δ</mi><mi>ρ</mi><mspace width="0.1em" /><mi>g</mi><mi>d</mi></mrow><mrow><mn>3</mn><msub><mi>C</mi><mi>d</mi></msub><mi>ρ</mi></mrow></mfrac></msqrt>
+          </math>
+        </div>
+        <p><math><mi>Re</mi></math> が <math><mi>U</mi></math> によるので、繰り返し計算で解きます。大きな気泡は変形してそれ以上速くならないので、Mendelson の式を上限にします。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>U</mi><mi>M</mi></msub><mo>=</mo><msqrt><mfrac><mrow><mn>2.14</mn><mi>σ</mi></mrow><mrow><mi>ρ</mi><mi>d</mi></mrow></mfrac><mo>+</mo><mn>0.505</mn><mi>g</mi><mi>d</mi></msqrt>
+          </math>
+          <math display="block">
+            <msub><mi>U</mi><mi>T</mi></msub><mo>=</mo><mi>min</mi><mo stretchy="false">(</mo><msub><mi>U</mi><mi>SN</mi></msub><mo>,</mo><msub><mi>U</mi><mi>M</mi></msub><mo stretchy="false">)</mo>
+          </math>
+        </div>
+        <p>5 ℃ のコーラでは、直径 0.1 mm で約 3 mm/s、1 mm で約 9 cm/s、3 mm で約 25 cm/s になります。直径ごとの値は、液温と飲み物が決まったときに表にしておき、補間して使います。</p>
+        <h3>泡プルーム</h3>
+        <p>たくさんの気泡がまとまって昇ると、周りの液を引きずり上げ、気泡はさらに速く昇ります。巻き込んだ空気の体積流量 <math><msub><mi>Q</mi><mi>g</mi></msub></math>(0.35 秒でならした値)から、その速さを足します。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>u</mi><mi>p</mi></msub><mo>=</mo><mn>0.35</mn><mspace width="0.1em" /><msup><mrow><mo>(</mo><mfrac><mrow><mi>g</mi><msub><mi>Q</mi><mi>g</mi></msub></mrow><msub><mi>R</mi><mtext>縁</mtext></msub></mfrac><mo>)</mo></mrow><mrow><mn>1</mn><mo>/</mo><mn>3</mn></mrow></msup>
+          </math>
+        </div>
+        <p><math><msub><mi>R</mi><mtext>縁</mtext></msub></math> はグラスの縁の半径です。横方向には、乱れ <math><mi>I</mi></math> が大きいほど大きくふらつかせます(乱流拡散)。気泡は壁を通り抜けず、壁に沿って昇ります。</p>
+      </section>
+
+      <!-- 10 -->
+      <section aria-labelledby="surface">
+        <h2 id="surface"><span class="num">10</span>液面から抜ける CO₂</h2>
+        <p>泡にならずに、液面から直接大気へ抜ける CO₂ もあります。</p>
+        <div class="eq">
+          <math display="block">
+            <mi>J</mi><mo>=</mo><msub><mi>k</mi><mi>L</mi></msub><mo stretchy="false">(</mo><msub><mi>C</mi><mi>L</mi></msub><mo>−</mo><msub><mi>C</mi><mi>eq</mi></msub><mo stretchy="false">)</mo><mspace width="0.1em" /><mi>A</mi>
+          </math>
+          <math display="block">
+            <msub><mi>k</mi><mi>L</mi></msub><mo>=</mo><mn>2</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup><mo>+</mo><mn>1.5</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup><mspace width="0.1em" /><mi>I</mi><mspace width="0.3em" /><mtext>m/s</mtext>
+          </math>
+        </div>
+        <p><math><mi>A</mi></math> は液面の面積(グラスを傾けると広がる)です。静かな液面では遅く、かき乱された液面では速く抜けます。グラスを傾けて壁を伝わせると、巻き込みが減るうえに液面が広がるので、この経路の割合が増えます。</p>
+      </section>
+
+      <!-- 11 -->
+      <section aria-labelledby="foam">
+        <h2 id="foam"><span class="num">11</span>泡の層</h2>
+        <p>液面に着いた気泡は泡の層に加わります。泡の層は「気体(CO₂ と空気)」と「泡の膜の液」の 2 つで持ちます。泡の体積は、この 2 つの体積の和です。</p>
+        <h3>生まれる泡</h3>
+        <p>生まれたての泡は、ガスの体積の割合が <math><msub><mi>φ</mi><mi>in</mi></msub></math>(0.68〜0.72)の湿った泡です。気体 <math><msub><mi>V</mi><mi>g</mi></msub></math> が泡になるとき、膜になる液を液から取り込みます。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>V</mi><mrow><mtext>膜</mtext><mo>,</mo><mtext>入</mtext></mrow></msub><mo>=</mo><msub><mi>V</mi><mi>g</mi></msub><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mi>φ</mi><mi>in</mi></msub></mrow><msub><mi>φ</mi><mi>in</mi></msub></mfrac>
+          </math>
+        </div>
+        <h3>膜からの脱ガス</h3>
+        <p>膜の液も過飽和なので、溶けていられる量を超えた CO₂ は、時定数 <math><msub><mi>τ</mi><mi>d</mi></msub></math> = 2 秒で泡の気体へ移ります。</p>
+        <div class="eq">
+          <math display="block">
+            <mi>Δ</mi><mi>n</mi><mo>=</mo><mo stretchy="false">(</mo><msub><mi>n</mi><mtext>膜</mtext></msub><mo>−</mo><msub><mi>C</mi><mi>eq</mi></msub><msub><mi>V</mi><mtext>膜</mtext></msub><mo stretchy="false">)</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>Δ</mi><mi>t</mi><mo>/</mo><msub><mi>τ</mi><mi>d</mi></msub></mrow></msup><mo stretchy="false">)</mo>
+          </math>
+        </div>
+        <h3>排液</h3>
+        <p>膜の液は重力で下へ抜け、液に戻ります。泡は乾いていきますが、液の割合 <math><msub><mi>ε</mi><mi>dry</mi></msub></math> = 3 % より乾くことはありません。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>V</mi><mrow><mtext>膜</mtext><mo>,</mo><mi>min</mi></mrow></msub><mo>=</mo><msub><mi>V</mi><mi>g</mi></msub><mfrac><msub><mi>ε</mi><mi>dry</mi></msub><mrow><mn>1</mn><mo>−</mo><msub><mi>ε</mi><mi>dry</mi></msub></mrow></mfrac>
+          </math>
+          <math display="block">
+            <mi>Δ</mi><msub><mi>V</mi><mtext>膜</mtext></msub><mo>=</mo><mo stretchy="false">(</mo><msub><mi>V</mi><mtext>膜</mtext></msub><mo>−</mo><msub><mi>V</mi><mrow><mtext>膜</mtext><mo>,</mo><mi>min</mi></mrow></msub><mo stretchy="false">)</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>Δ</mi><mi>t</mi><mo>/</mo><msub><mi>τ</mi><mtext>排液</mtext></msub></mrow></msup><mo stretchy="false">)</mo>
+          </math>
+        </div>
+        <p><math><msub><mi>τ</mi><mtext>排液</mtext></msub></math> は飲み物ごとの排液時定数です(<a href="#values">値の一覧</a>)。</p>
+        <h3>破裂</h3>
+        <p>泡は一定の割合で壊れ、乾いた泡ほど速く壊れます。壊れた泡の CO₂ は大気へ、空気はそのまま消え、膜の液は液に戻ります。</p>
+        <div class="eq">
+          <math display="block">
+            <mi>k</mi><mo>=</mo><mfrac><mrow><mn>0.35</mn><mo>+</mo><mn>0.65</mn><mi>χ</mi></mrow><msub><mi>τ</mi><mtext>寿命</mtext></msub></mfrac>
+          </math>
+          <math display="block">
+            <mi>χ</mi><mo>=</mo><mi>clamp</mi><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mfrac><mrow><mi>ε</mi><mo>−</mo><msub><mi>ε</mi><mi>dry</mi></msub></mrow><mrow><msub><mi>ε</mi><mi>in</mi></msub><mo>−</mo><msub><mi>ε</mi><mi>dry</mi></msub></mrow></mfrac><mo>,</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo>)</mo></mrow>
+          </math>
+        </div>
+        <dl class="where">
+          <dt><math><msub><mi>τ</mi><mtext>寿命</mtext></msub></math></dt><dd>泡の寿命 <math><mn>1</mn><mo>/</mo><msub><mi>k</mi><mi>c</mi></msub></math>(炭酸水 1.5 秒、ビール 180 秒など。「詳しいパラメータ」で変えられる)</dd>
+          <dt><math><mi>ε</mi></math></dt><dd>今の泡の液の割合。<math><msub><mi>ε</mi><mi>in</mi></msub><mo>=</mo><mn>1</mn><mo>−</mo><msub><mi>φ</mi><mi>in</mi></msub></math> は生まれたての泡の液の割合</dd>
+          <dt><math><mi>χ</mi></math></dt><dd>乾き具合。生まれたてで 0、乾ききると 1</dd>
+        </dl>
+        <p>1 ステップの間に壊れる割合は <math><mn>1</mn><mo>−</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>k</mi><mi>Δ</mi><mi>t</mi></mrow></msup></math> です。排液も脱ガスも破裂も、このように指数関数で厳密に積分しているので、時間の刻みを変えても結果がほとんど変わりません。</p>
+      </section>
+
+      <!-- 12 -->
+      <section aria-labelledby="heat">
+        <h2 id="heat"><span class="num">12</span>温度の変化</h2>
+        <p>注いだ液はボトルの温度(「液温」)で入り、グラスの液と混ざります。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>T</mi><mi>L</mi></msub><mo>←</mo><mfrac><mrow><msub><mi>T</mi><mi>L</mi></msub><msub><mi>V</mi><mi>L</mi></msub><mo>+</mo><msub><mi>T</mi><mtext>ボトル</mtext></msub><mi>Δ</mi><mi>V</mi></mrow><mrow><msub><mi>V</mi><mi>L</mi></msub><mo>+</mo><mi>Δ</mi><mi>V</mi></mrow></mfrac>
+          </math>
+        </div>
+        <p>液とグラスは、それぞれ 1 つの温度を持つ塊(集中定数系)として熱をやり取りします。2 つの温度は、熱容量で重みを付けた平均 <math><msub><mi>T</mi><mi>eq</mi></msub></math> へ指数関数で近づきます。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>T</mi><mi>eq</mi></msub><mo>=</mo><mfrac><mrow><msub><mi>C</mi><mi>L</mi></msub><msub><mi>T</mi><mi>L</mi></msub><mo>+</mo><msub><mi>C</mi><mi>g</mi></msub><msub><mi>T</mi><mi>g</mi></msub></mrow><mrow><msub><mi>C</mi><mi>L</mi></msub><mo>+</mo><msub><mi>C</mi><mi>g</mi></msub></mrow></mfrac>
+          </math>
+          <math display="block">
+            <mi>T</mi><mo>←</mo><msub><mi>T</mi><mi>eq</mi></msub><mo>+</mo><mo stretchy="false">(</mo><mi>T</mi><mo>−</mo><msub><mi>T</mi><mi>eq</mi></msub><mo stretchy="false">)</mo>
+            <mi>exp</mi><mrow><mo>[</mo><mo>−</mo><mi>h</mi><msub><mi>A</mi><mtext>濡れ</mtext></msub><mrow><mo>(</mo><mfrac><mn>1</mn><msub><mi>C</mi><mi>L</mi></msub></mfrac><mo>+</mo><mfrac><mn>1</mn><msub><mi>C</mi><mi>g</mi></msub></mfrac><mo>)</mo></mrow><mi>Δ</mi><mi>t</mi><mo>]</mo></mrow>
+          </math>
+        </div>
+        <dl class="where">
+          <dt><math><msub><mi>C</mi><mi>L</mi></msub></math></dt><dd>液(泡の膜を含む)の熱容量 <math><mi>ρ</mi><msub><mi>c</mi><mi>p</mi></msub><mi>V</mi></math>、<math><msub><mi>c</mi><mi>p</mi></msub></math> = 4180 J/(kg·K)</dd>
+          <dt><math><msub><mi>C</mi><mi>g</mi></msub></math></dt><dd>グラスの熱容量(質量 × 比熱。ガラス 840、プラスチック 1500 J/(kg·K))</dd>
+          <dt><math><mi>h</mi></math></dt><dd>熱伝達率 400 W/(m²·K)</dd>
+        </dl>
+        <p>注いでいる数秒の間に液温はほとんど変わりません。グラスの温度が泡に効くのは、主に前の節の「壁の温度」を通してです(報告書 §3.2 のとおり)。</p>
+        <h3>氷</h3>
+        <p>
+          氷(一辺 <math><mi>a</mi></math>、最大 24 mm の立方体)は、重力と浮力 <math><mi>g</mi><mspace width="0.1em" /><mi>ρ</mi><mo>/</mo><msub><mi>ρ</mi><mtext>氷</mtext></msub><mo>×</mo></math>(液に浸かっている割合)で動き、壁や他の氷と重ならないように押し戻します。液に浸かっている分の体積は液面を押し上げます。氷は溶けず、液を冷やすこともありません。
+        </p>
+      </section>
+
+      <!-- 13 -->
+      <section aria-labelledby="overflow">
+        <h2 id="overflow"><span class="num">13</span>グラスの容量とあふれ</h2>
+        <p>グラスを角度 <math><mi>θ</mi></math> だけ傾けると、液はいちばん低い縁(ボトル側)からあふれます。その縁の高さまでの体積が、そのときのグラスの容量 <math><msub><mi>V</mi><mtext>縁</mtext></msub></math> です。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>L</mi><mtext>縁</mtext></msub><mo>=</mo><mi>H</mi><mi>cos</mi><mi>θ</mi><mo>−</mo><msub><mi>R</mi><mtext>縁</mtext></msub><mi>sin</mi><mi>θ</mi>
+          </math>
+          <math display="block">
+            <msub><mi>V</mi><mtext>縁</mtext></msub><mo>=</mo><mi>V</mi><mo stretchy="false">(</mo><msub><mi>L</mi><mtext>縁</mtext></msub><mo stretchy="false">)</mo>
+          </math>
+        </div>
+        <p>
+          液面の高さは「液 + 液中の気泡 + 液に浸かった氷」の体積から、泡の上面はそれに泡の体積を足した体積から、<a href="#bottle">4 節</a>と同じ方法で求めます。泡は縁から少し盛り上がれる(ビールで 8 mm など)ので、泡があふれ始めるのは
+        </p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>V</mi><mtext>液</mtext></msub><mo>+</mo><msub><mi>V</mi><mtext>泡</mtext></msub><mo>&gt;</mo><msub><mi>V</mi><mtext>縁</mtext></msub><mo>+</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><msub><mi>A</mi><mtext>口</mtext></msub><msub><mi>h</mi><mtext>盛り上がり</mtext></msub>
+          </math>
+        </div>
+        <p>のときです。はみ出した分は泡から先にこぼし(泡の気体・膜の液・CO₂ を同じ割合で)、それでも液が <math><msub><mi>V</mi><mtext>縁</mtext></msub></math> を超えていれば液もこぼします。こぼれた液の量が「こぼれ」です。</p>
+      </section>
+
+      <!-- 14 -->
+      <section aria-labelledby="controls">
+        <h2 id="controls"><span class="num">14</span>操作と記録</h2>
+        <h3>押した位置と傾き</h3>
+        <p>押している位置を、ゲームの枠の左下を (0, 0)、右上を (1, 1) とする座標 <math><mo stretchy="false">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy="false">)</mo></math> で表すと、目標の傾きは次のとおりです。</p>
+        <div class="eq">
+          <math display="block">
+            <msub><mi>φ</mi><mtext>目標</mtext></msub><mo>=</mo><msub><mi>φ</mi><mtext>出始め</mtext></msub><mo>+</mo><mo stretchy="false">(</mo><mn>0.72</mn><mi>y</mi><mo>−</mo><mn>0.25</mn><mo stretchy="false">)</mo><mspace width="0.3em" /><mtext>rad</mtext>
+          </math>
+          <math display="block">
+            <msub><mi>θ</mi><mtext>目標</mtext></msub><mo>=</mo><msup><mn>60</mn><mo>∘</mo></msup><mo>×</mo><mi>clamp</mi><mrow><mo>(</mo><mfrac><mrow><mi>x</mi><mo>−</mo><mn>0.15</mn></mrow><mn>0.65</mn></mfrac><mo>,</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo>)</mo></mrow>
+          </math>
+        </div>
+        <p>
+          ボトルの縦軸は、<a href="#bottle">液が出始める角度</a> <math><msub><mi>φ</mi><mtext>出始め</mtext></msub></math> から −14°〜+27° の範囲です。実際の傾きは、手の速さの限界として、ボトルは傾けるとき 3.2 rad/s・戻すとき 4.5 rad/s、グラスは 1.4 rad/s より速くは変わりません。指を離すと、どちらも 0(直立)へ戻ります。
+        </p>
+        <p>ボトルの口は、液柱がボトル側の内壁(縁から 2 cm 下)に届くように、液の勢いを見ながら位置を自動で合わせます。勢いが強すぎると壁に届かず、液面へ直接突っ込みます。</p>
+        <h3>タイムと記録</h3>
+        <ul>
+          <li>最初の 1 滴が出た時点で計り始め、グラスの<b>液</b>(泡の膜の液は含まない)が目標量に達した時点でタイムが決まります。</li>
+          <li>その後、泡が落ち着くまで(1.5 秒以上たち、液柱がなく、泡が増えておらず、こぼれていない状態。最長 15 秒)待って、こぼれた量を数えます。</li>
+          <li>記録 = タイム + こぼれた液 1 mL ごとに 0.5 秒。</li>
+          <li>目標量に届く前にボトルが空になると失敗です。</li>
+        </ul>
+      </section>
+
+      <!-- 15 -->
+      <section aria-labelledby="values">
+        <h2 id="values"><span class="num">15</span>飲み物とグラスの値</h2>
+        <div class="table-wrap">
+          <table>
+            <caption>飲み物(「詳しいパラメータ」を変えていないとき)</caption>
+            <thead>
+              <tr>
+                <th>飲み物</th>
+                <th class="n">GV</th>
+                <th class="n">泡の寿命 [s]</th>
+                <th class="n">排液 [s]</th>
+                <th class="n">表面張力 [N/m]</th>
+                <th class="n">粘度倍率</th>
+                <th class="n">塩析係数</th>
+                <th class="n"><math><msub><mi>φ</mi><mi>in</mi></msub></math></th>
+                <th class="n">盛り上がり [mm]</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>水(練習用)</td><td class="n">0</td><td class="n">0.5</td><td class="n">0.3</td><td class="n">0.072</td><td class="n">1.00</td><td class="n">1.00</td><td class="n">0.72</td><td class="n">0.5</td></tr>
+              <tr><td>炭酸水</td><td class="n">3.8</td><td class="n">1.5</td><td class="n">0.6</td><td class="n">0.072</td><td class="n">1.00</td><td class="n">1.00</td><td class="n">0.72</td><td class="n">1</td></tr>
+              <tr><td>コーラ</td><td class="n">3.5</td><td class="n">12</td><td class="n">2.5</td><td class="n">0.065</td><td class="n">1.25</td><td class="n">0.95</td><td class="n">0.70</td><td class="n">2</td></tr>
+              <tr><td>サイダー</td><td class="n">3.0</td><td class="n">5</td><td class="n">1.5</td><td class="n">0.068</td><td class="n">1.20</td><td class="n">0.95</td><td class="n">0.70</td><td class="n">1.5</td></tr>
+              <tr><td>ビール</td><td class="n">2.6</td><td class="n">180</td><td class="n">20</td><td class="n">0.044</td><td class="n">1.60</td><td class="n">0.97</td><td class="n">0.68</td><td class="n">8</td></tr>
+              <tr><td>シャンパン</td><td class="n">6.0</td><td class="n">8</td><td class="n">2.0</td><td class="n">0.048</td><td class="n">1.50</td><td class="n">0.92</td><td class="n">0.72</td><td class="n">1</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <caption>グラス(内側の寸法)</caption>
+            <thead>
+              <tr>
+                <th>グラス</th>
+                <th class="n">高さ [mm]</th>
+                <th class="n">底の半径 [mm]</th>
+                <th class="n">縁の半径 [mm]</th>
+                <th class="n">容量 [mL]</th>
+                <th>材質</th>
+                <th class="n">質量 [g]</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>タンブラー</td><td class="n">110</td><td class="n">30</td><td class="n">36</td><td class="n">377</td><td>ガラス</td><td class="n">260</td></tr>
+              <tr><td>ビアグラス</td><td class="n">140</td><td class="n">24</td><td class="n">36</td><td class="n">401</td><td>ガラス</td><td class="n">280</td></tr>
+              <tr><td>フルート</td><td class="n">170</td><td class="n">0(とがった底)</td><td class="n">20.5</td><td class="n">194</td><td>ガラス</td><td class="n">160</td></tr>
+              <tr><td>プラカップ</td><td class="n">95</td><td class="n">28</td><td class="n">40</td><td class="n">349</td><td>プラスチック</td><td class="n">8</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>ボトルは 500 mL の PET ボトル(胴の半径 32 mm、口の半径 11 mm)で、どの飲み物でも同じ形で計算しています(画面のボトルの見た目は飲み物ごとに違います)。</p>
+        <div class="note">
+          <b>校正した値</b>: 核生成サイトの密度、空気の巻き込みの倍率(1.5)、泡プルームの係数(0.35)、乱流核の係数は、報告書でも「要校正」とされている値です。「静置した炭酸水が最初に毎秒 1 mL 前後のガスを出す」「コーラを直立のまま全開で注ぐとあふれる」「傾けて壁伝いに 70 mL/s で注げばあふれない」といった経験に合うように決めています。
+        </div>
+      </section>
+
+      <!-- 16 -->
+      <section aria-labelledby="refs">
+        <h2 id="refs"><span class="num">16</span>参考文献</h2>
+        <ul>
+          <li>Biń, A. K. “Gas entrainment by plunging liquid jets”, <i>Chemical Engineering Science</i> 48 (1993) 3585–3630.</li>
+          <li>Epstein, P. S., Plesset, M. S. “On the stability of gas bubbles in liquid–gas solutions”, <i>J. Chem. Phys.</i> 18 (1950) 1505.</li>
+          <li>Jones, S. F., Evans, G. M., Galvin, K. P. “Bubble nucleation from gas cavities — a review”, <i>Advances in Colloid and Interface Science</i> 80 (1999) 27–50.</li>
+          <li>Liger-Belair, G. <i>Uncorked: The Science of Champagne</i> (Princeton Univ. Press, 2004/2013).</li>
+          <li>Clift, R., Grace, J. R., Weber, M. E. <i>Bubbles, Drops, and Particles</i> (Academic Press, 1978).</li>
+          <li>Weaire, D., Hutzler, S. <i>The Physics of Foams</i> (Oxford Univ. Press, 1999).</li>
+          <li>Verbist, G., Weaire, D., Kraynik, A. M. “The foam drainage equation”, <i>J. Phys.: Condens. Matter</i> 8 (1996) 3715.</li>
+          <li>Sander, R. “Compilation of Henry's law constants for water as solvent”, <i>Atmos. Chem. Phys.</i> 15 (2015) 4399.</li>
+        </ul>
+        <p>
+          モデルの背景にある物理現象の整理は、リポジトリの
+          <a href="https://github.com/atsuhiron/soda-server/blob/main/soda_foam_physics_report.md">soda_foam_physics_report.md</a>
+          にまとめています。
+        </p>
+      </section>
+
+      <p class="back"><a class="btn ghost" href="index.html">ゲームに戻る</a></p>
+    </main>
+  </body>
+</html>

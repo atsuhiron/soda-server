@@ -10,6 +10,9 @@
   --accent: #0f7f86;
   --accent-ink: #ffffff;
   --danger: #c23a32;
+  --thermo-red: #d23f33;
+  --thermo-tube: #ffffff;
+  --ice: #5bb8e0;
   --grid: rgba(0, 0, 0, 0.07);
   --series-1: #2a78d6;
   --series-2: #eb6834;
@@ -18,7 +21,7 @@
   --series-5: #e87ba4;
   --scene-top: #f6f1e7;
   --scene-bottom: #e8dfcf;
-  --scene-tile: rgba(80, 60, 30, 0.05);
+  --scene-grid: rgba(80, 60, 30, 0.16);
   --table-top: #c49b6c;
   --table-front: #8e6542;
   --hud-bg: rgba(255, 255, 255, 0.78);
@@ -39,6 +42,9 @@
     --accent: #3fb3b9;
     --accent-ink: #0b1a1b;
     --danger: #e66767;
+    --thermo-red: #e5584c;
+    --thermo-tube: #2c2c29;
+    --ice: #8fd4f2;
     --grid: rgba(255, 255, 255, 0.08);
     --series-1: #3987e5;
     --series-2: #d95926;
@@ -47,7 +53,7 @@
     --series-5: #d55181;
     --scene-top: #23272e;
     --scene-bottom: #171a1f;
-    --scene-tile: rgba(255, 255, 255, 0.035);
+    --scene-grid: rgba(255, 255, 255, 0.11);
     --table-top: #6d5139;
     --table-front: #45331f;
     --hud-bg: rgba(26, 26, 25, 0.78);
@@ -66,6 +72,9 @@
   --accent: #3fb3b9;
   --accent-ink: #0b1a1b;
   --danger: #e66767;
+  --thermo-red: #e5584c;
+  --thermo-tube: #2c2c29;
+  --ice: #8fd4f2;
   --grid: rgba(255, 255, 255, 0.08);
   --series-1: #3987e5;
   --series-2: #d95926;
@@ -74,7 +83,7 @@
   --series-5: #d55181;
   --scene-top: #23272e;
   --scene-bottom: #171a1f;
-  --scene-tile: rgba(255, 255, 255, 0.035);
+  --scene-grid: rgba(255, 255, 255, 0.11);
   --table-top: #6d5139;
   --table-front: #45331f;
   --hud-bg: rgba(26, 26, 25, 0.78);
@@ -105,10 +114,59 @@ body {
   margin: 0 auto;
   padding: 18px 20px 10px;
 }
+.top-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+a.btn {
+  display: inline-block;
+  text-decoration: none;
+}
 .brand h1 {
   margin: 0;
   font-size: 22px;
   letter-spacing: 0.01em;
+}
+/* タイトルの横のバージョンと変更履歴。幅が足りなければタイトルの下へ折り返す */
+.brand-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+}
+.brand-line h1 {
+  margin-right: 2px;
+}
+.version {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.changelog {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.changelog:hover {
+  color: var(--accent);
+}
+.changelog svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .brand p {
   margin: 0;
@@ -116,17 +174,40 @@ body {
 }
 
 .help {
-  max-width: 1320px;
-  margin: 0 auto 8px;
-  padding: 0 20px;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.help-body {
+  padding: 16px 20px 18px;
+}
+.help::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.help-head h2 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--text-primary);
 }
 .help ul {
   margin: 0;
-  padding: 12px 16px 12px 32px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+.help b {
+  color: var(--text-primary);
 }
 
 .layout {
@@ -156,6 +237,18 @@ body {
   gap: 12px;
   min-width: 0;
 }
+/* ゲームの枠(.stage)の左と下は、操作のグラフの目盛りラベル(#axes)の場所 */
+.plot {
+  position: relative;
+  padding: 0 0 44px 56px;
+}
+.axes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
 .stage {
   position: relative;
   height: min(70vh, 640px);
@@ -172,10 +265,7 @@ body {
   width: 100%;
   height: 100%;
   touch-action: none;
-  cursor: grab;
-}
-#scene.holding {
-  cursor: grabbing;
+  cursor: crosshair;
 }
 
 .hud {
@@ -198,10 +288,6 @@ body {
   right: 12px;
   margin: 0;
   width: 190px;
-}
-.phase {
-  font-size: 12px;
-  color: var(--text-secondary);
 }
 .timer {
   font-size: 34px;
@@ -261,26 +347,6 @@ body {
   color: var(--danger);
 }
 
-.guide {
-  position: absolute;
-  color: var(--text-muted);
-  font-size: 12px;
-  pointer-events: none;
-  opacity: 0.85;
-}
-.guide-x {
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-.guide-y {
-  right: 8px;
-  top: 50%;
-  writing-mode: vertical-rl;
-  transform: translateY(-50%);
-}
-
 .hint {
   position: absolute;
   left: 50%;
@@ -299,10 +365,8 @@ body {
   margin: 0;
   font-size: 15px;
 }
-.hint .sub {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: 4px;
+.hint p + p {
+  margin-top: 2px;
 }
 .hint.gone {
   opacity: 0;
@@ -371,6 +435,10 @@ body {
   font-size: 22px;
   color: var(--danger);
 }
+/* 失敗のときは記録の欄に文章が入るので、単位の「秒」は出さない */
+.result-card.failed .record small {
+  display: none;
+}
 
 .tutorial {
   background: var(--surface-1);
@@ -433,11 +501,6 @@ body {
   font-weight: 600;
   color: var(--text-secondary);
   margin: 0 0 4px 4px;
-}
-.chart .unit {
-  font-weight: 400;
-  color: var(--text-muted);
-  margin-left: 4px;
 }
 .chart canvas {
   display: block;
@@ -526,22 +589,37 @@ body {
   margin-bottom: 2px;
 }
 
+/* 右側: 条件・操作・記録をそれぞれ見出し帯つきのカードに分ける */
 .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-self: start;
+}
+.panel-sec {
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 14px 16px 18px;
-  align-self: start;
+  overflow: hidden;
 }
-.panel h2 {
-  font-size: 13px;
-  margin: 14px 0 8px;
-  color: var(--text-secondary);
+.panel-sec > h2 {
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
   letter-spacing: 0.04em;
 }
-.panel h2:first-child {
-  margin-top: 0;
+.panel-body {
+  padding: 12px 16px 14px;
+}
+.panel-body > :last-child,
+.panel-body form > :last-child {
+  margin-bottom: 0;
 }
 .field {
   display: grid;
@@ -572,6 +650,87 @@ select {
 input[type='range'] {
   accent-color: var(--accent);
 }
+
+/* 液温・グラスの温度: アルコール温度計の形のスライダー。赤い液柱の先が今の値で、
+   つまみは液柱の先の細い印だけ。液柱と目盛りの位置は --p(0〜1)から同じ式で決める */
+.thermo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding-left: 12px;
+}
+.thermo-bulb {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.55), transparent 45%),
+    var(--thermo-red);
+  pointer-events: none;
+}
+input.thermo-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
+  background:
+    linear-gradient(var(--thermo-red), var(--thermo-red)) 0 50% / calc(8px + (100% - 16px) * var(--p, 0)) 4px no-repeat,
+    var(--thermo-tube);
+  cursor: pointer;
+}
+input.thermo-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  background: linear-gradient(to right, transparent 7px, var(--text-primary) 7px, var(--text-primary) 9px, transparent 9px);
+}
+input.thermo-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(to right, transparent 7px, var(--text-primary) 7px, var(--text-primary) 9px, transparent 9px);
+}
+input.thermo-input::-moz-range-track {
+  background: transparent;
+}
+.thermo-scale {
+  position: relative;
+  height: 18px;
+  margin: -2px 0 0 12px;
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.thermo-scale .tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 4px;
+  background: var(--text-secondary);
+}
+.thermo-scale .tick.major {
+  height: 6px;
+}
+.thermo-scale .tick-label {
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
+}
 .advanced {
   border-top: 1px solid var(--border);
   padding-top: 8px;
@@ -584,7 +743,7 @@ input[type='range'] {
   margin-bottom: 8px;
 }
 .facts {
-  margin: 8px 0 0;
+  margin: 0;
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--surface-2);
@@ -596,6 +755,15 @@ input[type='range'] {
 }
 .facts b {
   color: var(--text-primary);
+}
+.facts .row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: 8px;
+}
+.facts .row > span:last-child {
+  margin-left: auto;
 }
 .btn {
   font: inherit;
@@ -634,16 +802,64 @@ input:focus-visible {
   font-size: 13px;
 }
 .recent {
-  margin: 0;
-  padding-left: 20px;
+  width: 100%;
+  border-collapse: collapse;
   font-size: 12px;
   color: var(--text-secondary);
-  display: grid;
-  gap: 2px;
   font-variant-numeric: tabular-nums;
 }
-.recent b {
+.recent caption {
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 8px 0 2px;
+}
+.recent th {
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+  white-space: nowrap;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.recent th small {
+  font-size: 10px;
+  font-weight: 400;
+}
+.recent td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.recent tr:last-child td {
+  border-bottom: 0;
+}
+.recent th:first-child,
+.recent td:first-child {
+  padding-left: 0;
+}
+.recent th:last-child,
+.recent td:last-child {
+  padding-right: 0;
+}
+.recent .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.recent td:first-child {
+  font-weight: 700;
   color: var(--text-primary);
+}
+.recent tr.failed td:first-child {
+  color: var(--danger);
+}
+.recent .nw {
+  white-space: nowrap;
+}
+.recent .empty {
+  text-align: left;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 .foot {
   max-width: 1320px;
@@ -653,22 +869,68 @@ input:focus-visible {
   font-size: 12px;
 }
 @media (max-width: 600px) {
+  .plot {
+    padding: 0 0 40px 46px;
+  }
   .stage {
     height: 62vh;
     min-height: 340px;
   }
-  .hud-left {
-    width: 150px;
+  /* 枠が狭いので、左右の表示は枠の幅の半分ずつ(間は 8px) */
+  .hud-left,
+  .hud-right {
+    width: calc(50% - 16px);
     padding: 8px 10px;
   }
-  .hud-right {
-    width: 150px;
-    padding: 8px 10px;
+  .mini div {
+    font-size: 11px;
+    gap: 4px;
+  }
+  .mini dt {
+    white-space: nowrap;
   }
   .timer {
     font-size: 26px;
   }
-  .guide-y {
-    display: none;
-  }
+}
+
+/* 氷の個数: 氷らしい水色。accent-color に淡い色を使うとブラウザが残りの溝を濃い色に
+   してしまうので、溝と塗りは自分で描く(塗りの長さは --p、0〜1) */
+#ice {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  margin: 6px 0;
+  border-radius: 3px;
+  background:
+    linear-gradient(var(--ice), var(--ice)) 0 0 / calc(8px + (100% - 16px) * var(--p, 0)) 100% no-repeat,
+    var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+#ice::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--ice);
+  background: var(--surface-1);
+}
+#ice::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--ice);
+  background: var(--surface-1);
+}
+#ice::-moz-range-track {
+  background: transparent;
+}
+
+/* 「条件」の中の区切り(飲み物・グラス・その他・詳しいパラメータ)。詳しいパラメータの上の線と同じ */
+.divider {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 4px 0 10px;
 }
