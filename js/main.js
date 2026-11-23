@@ -92,15 +92,19 @@
     $('entrainOut').textContent = `× ${s.entrain.toFixed(2)}`;
     const ceq = P.solubilityGL(s.liquidTemp) * sim.drink.salt;
     const cl = s.gv * P.GV_GL;
+    // 説明を左、数値を右に並べる
+    const row = (name, value) => `<div class="row"><span>${name}</span><span>${value}</span></div>`;
     const gas =
       s.gv > 0
-        ? `<div>溶けている CO₂ <b>${cl.toFixed(1)} g/L</b> ・ 溶けていられる量 <b>${ceq.toFixed(2)} g/L</b></div>` +
-          `<div>過飽和度 S = <b>${(cl / ceq - 1).toFixed(2)}</b>(液温で決まる)</div>`
-        : '<div>CO₂ は溶けていません(泡は巻き込んだ空気だけ)</div>';
+        ? row('溶解CO₂ / 飽和溶解CO₂', `(<b>${cl.toFixed(1)}</b> g/L) / (<b>${ceq.toFixed(2)}</b> g/L)`) +
+          row('過飽和度 S', `<b>${(cl / ceq - 1).toFixed(2)}</b>`)
+        : row('溶解CO₂', '<b>なし</b>');
     $('facts').innerHTML =
-      `<div>グラス容量 <b>${Math.round(sim.glass.volume * 1e6)} mL</b> ・ 目標 <b>${Math.round(sim.targetVolume * 1e6)} mL</b></div>` +
+      row('グラス容量', `<b>${Math.round(sim.glass.volume * 1e6)}</b> mL`) +
+      row('目標', `<b>${Math.round(sim.targetVolume * 1e6)}</b> mL`) +
       gas +
-      `<div>泡の寿命 <b>${s.foamLife} 秒</b> ・ サイト <b>${s.siteDensity} 個/cm²</b></div>`;
+      row('泡の寿命', `<b>${s.foamLife}</b> 秒`) +
+      row('核生成サイト', `<b>${s.siteDensity}</b> 個/cm²`);
     $('tutorial').hidden = !sim.drink.tutorial;
   }
 
@@ -150,10 +154,12 @@
   });
   $('restartBtn').addEventListener('click', restart);
   $('againBtn').addEventListener('click', restart);
-  $('helpBtn').addEventListener('click', () => {
-    const open = $('helpPanel').hidden;
-    $('helpPanel').hidden = !open;
-    $('helpBtn').setAttribute('aria-expanded', String(open));
+  // 遊び方(モーダル)。Esc・✕・外側のクリックで閉じる
+  const help = $('helpPanel');
+  $('helpBtn').addEventListener('click', () => help.showModal());
+  $('helpClose').addEventListener('click', () => help.close());
+  help.addEventListener('click', (e) => {
+    if (e.target === help) help.close(); // 余白(::backdrop)を押したとき
   });
   let speed = 1;
   $('speed').addEventListener('change', () => (speed = +$('speed').value));
@@ -206,6 +212,7 @@
   setMouth(1.5);
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (help.open) return;
     if (e.key === 'r' || e.key === 'R') restart();
     else if (e.key === ' ') {
       if (game.state === 'done' || game.state === 'failed') return;
@@ -290,12 +297,10 @@
   }
 
   // ---------- HUD ----------
-  const PHASE = { ready: '準備OK', pouring: '注いでいます', settling: '泡を見届け中…', done: '結果', failed: '失敗' };
   const MODE = { plunge: '直接', film: '壁伝い', filmBottom: '壁伝い', bottom: '底に衝突' };
   function updateHud() {
     const sim = game.sim;
     const st = sim.stats();
-    $('phase').textContent = PHASE[game.state];
     $('hudTime').textContent = (game.finishTime != null ? game.finishTime : game.time).toFixed(2);
     $('hudLiquid').textContent = Math.round(st.VL * 1e6);
     $('hudTarget').textContent = Math.round(sim.targetVolume * 1e6);

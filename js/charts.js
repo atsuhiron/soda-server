@@ -21,7 +21,7 @@
     constructor(canvas, opts) {
       this.canvas = canvas;
       this.ctx = canvas.getContext('2d');
-      this.opts = opts; // { series: [{key, label, color, area}], refs: [{key, label, dash}], yMax, unit }
+      this.opts = opts; // { series: [{key, label, color, area}], refs: [{key, label, dash}], yMax, unit(縦軸の単位) }
       this.hoverT = null;
     }
     resize() {
@@ -35,7 +35,7 @@
     layout(tMax) {
       const padL = 40;
       const padR = 44;
-      const padT = 8;
+      const padT = 22; // 縦軸の単位を一番上の目盛りの上に置く分
       const padB = 20;
       this.box = { x0: padL, x1: this.W - padR, y0: padT, y1: this.H - padB };
       this.tMax = tMax;
@@ -69,10 +69,15 @@
         c.stroke();
         c.fillText(String(Math.round(v)), b.x0 - 6, y);
       }
+      // 単位: 縦軸は一番上の目盛りの上、横軸は目盛りの列の右端
+      c.textBaseline = 'bottom';
+      c.fillText(o.unit, b.x0 - 6, b.y0 - 6);
       c.textAlign = 'center';
       c.textBaseline = 'top';
       const xs = niceStep(tMax, 6);
-      for (let t = 0; t <= tMax + 1e-9; t += xs) c.fillText(`${Math.round(t)}s`, this.tx(t), b.y1 + 5);
+      for (let t = 0; t <= tMax + 1e-9; t += xs) c.fillText(String(Math.round(t)), this.tx(t), b.y1 + 5);
+      c.textAlign = 'left';
+      c.fillText('s', b.x1 + 12, b.y1 + 5);
       if (!hist.length) return;
       // 基準線(縁の容量・目標)
       for (const r of o.refs || []) {
@@ -188,11 +193,13 @@
         ],
         refs: [{ label: '縁', dash: [5, 4], get: ml('cap') }],
         yMax: 400,
+        unit: 'mL',
       });
       this.flow = new LineChart(flowCanvas, {
         series: [{ key: 'q', label: '流量', color: 's3', area: true, get: ml('q') }],
         refs: [],
         yMax: 150,
+        unit: 'mL/s',
       });
       this.tooltip = tooltip;
       this.hist = [];
