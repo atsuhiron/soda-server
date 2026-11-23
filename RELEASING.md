@@ -1,6 +1,6 @@
 # リリース手順
 
-「vX.Y.Z を公開して」と頼まれたときに行う作業です。公開そのものは `v*` タグの push で `.github/workflows/release.yml` が行いますが、その前に変更履歴とバージョン表記をそろえ、PR を通しておきます。
+「vX.Y.Z を公開して」と頼まれたときに行う作業です。公開そのものは `v*` タグの push で `.github/workflows/release.yml` が行いますが、その前に CHANGELOG と package.json のバージョンをそろえ、PR を通しておきます。
 
 ## バージョン番号の決め方
 
@@ -31,8 +31,9 @@
      - `[未リリース]: https://github.com/atsuhiron/soda-server/compare/vX.Y.Z...main`
      - `[X.Y.Z]: https://github.com/atsuhiron/soda-server/compare/v前回...vX.Y.Z`(初回は `https://github.com/atsuhiron/soda-server/releases/tag/vX.Y.Z`)
 2. **package.json** の `"version"` を `X.Y.Z` にする
-3. **公開ページのバージョン表記**: 実装したら、その場所をここに書き足す(現時点では未実装)
-4. 物理パラメータの校正値を変えたリリースでは、過去のベスト記録と比べられなくなる。`js/main.js` の `BEST_KEY` の末尾番号を上げるかどうかを依頼者に確認する
+3. 物理パラメータの校正値を変えたリリースでは、過去のベスト記録と比べられなくなる。`js/main.js` の `BEST_KEY` の末尾番号を上げるかどうかを依頼者に確認する
+
+公開ページのバージョン表記(タイトルの横)は書き換えなくてよい。`index.html` には「開発版」と書いてあり、公開のときに `release.yml` がタグ名(`vX.Y.Z`)に置き換える。置き換える場所の目印 `<!--VERSION-->…<!--/VERSION-->` は消さない(見つからないと公開が止まる)。
 
 `npm test` が通ることを確かめ、コミット `vX.Y.Z をリリース` を作り、PR を出す。CI が通ったら、マージは依頼者に頼む。
 
@@ -52,7 +53,7 @@ git push origin vX.Y.Z
 ## 3. 公開を確認する
 
 - [ ] Release ワークフローが成功した(`gh run list --workflow release.yml --limit 1`)
-- [ ] https://atsuhiron.github.io/soda-server/ が開き、ゲームが動く(バージョン表記を実装したら、それが `X.Y.Z` になっている)
+- [ ] https://atsuhiron.github.io/soda-server/ が開き、ゲームが動く。タイトルの横のバージョン表記が `vX.Y.Z` になっている
 - [ ] GitHub Release を作る。本文には CHANGELOG の `[X.Y.Z]` の節をそのまま使う(`gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <その節を書き出したファイル>`)
 
 ## 失敗したとき

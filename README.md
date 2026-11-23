@@ -65,7 +65,7 @@ npm run calibrate   # 決まった注ぎ方を自動で実行し、タイム・�
 ### CI とリリース
 
 - **PR ごと**(`.github/workflows/ci.yml`): 全 JS ファイルの構文チェックと `npm test`。
-- **`v` で始まるタグの push**(`.github/workflows/release.yml`): `npm test` が通れば、`index.html`・`physics.html`・`css/`・`js/` だけを GitHub Pages に公開します。
+- **`v` で始まるタグの push**(`.github/workflows/release.yml`): `npm test` が通れば、`index.html`・`physics.html`・`css/`・`js/` だけを GitHub Pages に公開します。タイトルの横のバージョン表記(手元では「開発版」)は、このときタグ名に置き換わります。
 
 タグを付ける前に CHANGELOG.md や package.json のバージョンをそろえる必要があるので、公開は [RELEASING.md](RELEASING.md) の手順で行います(初回に必要な GitHub の設定も載せています)。変更履歴は [CHANGELOG.md](CHANGELOG.md) にあります。
 

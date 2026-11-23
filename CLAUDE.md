@@ -9,4 +9,4 @@
 
 ## 「vX.Y.Z を公開して」と言われたら
 
-RELEASING.md の手順に上から順に従う。タグを push するだけでは済まない(CHANGELOG・package.json・公開ページのバージョン表記の更新と、リリース用 PR のマージが先)。
+RELEASING.md の手順に上から順に従う。タグを push するだけでは済まない(CHANGELOG・package.json の更新と、リリース用 PR のマージが先)。公開ページのバージョン表記は、公開時にワークフローがタグ名から書き込む。
