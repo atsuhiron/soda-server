@@ -804,6 +804,9 @@ input:focus-visible {
 .recent tr.failed td:first-child {
   color: var(--danger);
 }
+.recent .nw {
+  white-space: nowrap;
+}
 .recent .empty {
   text-align: left;
   font-weight: 400;

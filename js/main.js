@@ -294,7 +294,17 @@
 
   // ---------- 記録 ----------
   const settingsKey = (s) => JSON.stringify(Object.keys(s).sort().map((k) => [k, s[k]]));
-  const label = (s) => `${P.DRINKS[s.drink].name} ${s.liquidTemp}℃・${P.GLASSES[s.glass].name}${s.ice ? `・氷${s.ice}` : ''}`;
+  // 記録の表の「飲み物」「グラス」の欄。氷はグラスに入れるものなのでグラスの欄に書く
+  const drinkLabel = (s) => `${P.DRINKS[s.drink].name} ${s.liquidTemp}℃`;
+  const glassLabel = (s) => `${P.GLASSES[s.glass].name} ${s.glassTemp}℃${s.ice ? `・氷${s.ice}` : ''}`;
+  // 以前の記録は「コーラ 5℃・タンブラー・氷1」の 1 つの文字列(グラスの温度なし)なので、最初の「・」で分ける
+  const recordCols = (r) => {
+    if (r.drink !== undefined) return [r.drink, r.glass];
+    const i = (r.label || '').indexOf('・');
+    return i < 0 ? [r.label || '', ''] : [r.label.slice(0, i), r.label.slice(i + 1)];
+  };
+  // 欄が狭いので折り返すが、「ビアグラス」「20℃」「氷2」のそれぞれの途中では折り返さない
+  const keepWords = (text) => text.replace(/[^ ・]+/g, (w) => `<span class="nw">${w}</span>`);
   function showRecords() {
     const best = store.get(BEST_KEY, {})[settingsKey(settings)];
     $('bestLine').innerHTML = best
@@ -306,10 +316,10 @@
           .map(
             (r) =>
               `<tr${r.ok ? '' : ' class="failed"'}><td class="num">${r.ok ? r.record.toFixed(2) : '失敗'}</td>` +
-              `<td>${r.label}</td><td class="num">${r.spill.toFixed(1)}</td></tr>`,
+              `<td>${recordCols(r).map(keepWords).join('</td><td>')}</td><td class="num">${r.spill.toFixed(1)}</td></tr>`,
           )
           .join('')
-      : '<tr><td colspan="3" class="empty">まだ記録はありません</td></tr>';
+      : '<tr><td colspan="4" class="empty">まだ記録はありません</td></tr>';
   }
   showRecords();
 
@@ -344,7 +354,7 @@
       $('resFoam').textContent = `${(game.foamMax * 1000).toFixed(0)} mm`;
     }
     const recent = store.get(RECENT_KEY, []);
-    recent.unshift({ ok: r.ok, record: r.record || 0, spill: r.spill, label: label(settings) });
+    recent.unshift({ ok: r.ok, record: r.record || 0, spill: r.spill, drink: drinkLabel(settings), glass: glassLabel(settings) });
     store.set(RECENT_KEY, recent.slice(0, 8));
     showRecords();
     $('result').hidden = false;
