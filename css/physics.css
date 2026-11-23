@@ -1,0 +1,253 @@
+/* 物理モデルの解説ページ(physics.html)。色・フォントなどのトークンと .topbar・.btn は style.css のもの */
+
+.doc {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 8px 20px 48px;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.doc h2 {
+  margin: 44px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 20px;
+  line-height: 1.4;
+}
+.doc h2 .num {
+  color: var(--accent);
+  margin-right: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.doc h3 {
+  margin: 26px 0 6px;
+  font-size: 16px;
+}
+.doc p,
+.doc ul,
+.doc ol {
+  margin: 8px 0;
+}
+.doc li + li {
+  margin-top: 2px;
+}
+.doc a {
+  color: var(--accent);
+}
+.doc .lead {
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+.doc small,
+.doc .muted {
+  color: var(--text-muted);
+}
+
+/* 目次 */
+.toc {
+  margin: 20px 0 8px;
+  padding: 14px 18px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.toc h2 {
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.toc ol {
+  margin: 0;
+  padding-left: 1.6em;
+  columns: 2;
+  column-gap: 32px;
+  font-size: 14px;
+}
+.toc a {
+  text-decoration: none;
+}
+.toc a:hover {
+  text-decoration: underline;
+}
+
+/* 数式 */
+/* 括弧を分数の高さまで伸ばすには、伸びる字形を持つ数式用フォントが要る(Windows は Cambria Math、Mac は STIX Two Math) */
+.doc math {
+  font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", math;
+  font-size: 1.08em;
+}
+/* 並んだ式は、幅が足りなければ折り返して 1 行ずつにする */
+.eq {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px 2.5em;
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+/* display: block にすると MathML の組版が効かなくなるので block math を使う */
+.eq math {
+  display: block math;
+  font-size: 1.15em;
+}
+
+/* 記号の説明 */
+.where {
+  margin: 4px 0 12px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 14px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.where dt {
+  text-align: right;
+  color: var(--text-primary);
+}
+.where dd {
+  margin: 0;
+}
+
+/* 補足 */
+.note {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.note b {
+  color: var(--text-primary);
+}
+
+/* 表 */
+.table-wrap {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+.doc table {
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  min-width: 100%;
+}
+.doc caption {
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding-bottom: 4px;
+}
+.doc th,
+.doc td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.doc th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.doc td.n,
+.doc th.n {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* 1 ステップの流れ */
+.steps {
+  counter-reset: step;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+.steps li {
+  counter-increment: step;
+  margin: 0;
+  padding: 8px 12px 8px 40px;
+  position: relative;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 20px;
+}
+.steps a {
+  font-weight: 600;
+}
+
+/* CO₂ の行き先 */
+.flow {
+  margin: 12px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.flow span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.flow i {
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.back {
+  margin-top: 40px;
+}
+@media (max-width: 600px) {
+  .doc {
+    padding: 4px 16px 40px;
+    font-size: 14px;
+  }
+  .toc ol {
+    columns: 1;
+  }
+  .eq {
+    padding: 10px 10px;
+  }
+  .eq math {
+    font-size: 0.95em;
+  }
+  .where {
+    grid-template-columns: 1fr;
+  }
+  .where dt {
+    text-align: left;
+    margin-top: 4px;
+  }
+}

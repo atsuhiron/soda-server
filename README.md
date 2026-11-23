@@ -32,6 +32,8 @@ Please serve the soda—but be careful not to spill it.
 
 ## 物理モデル(js/physics.js)
 
+計算式の詳しい解説は [physics.html](physics.html)(ゲームの右上の「物理モデル」)にあります。
+
 | 報告書 | 実装 |
 |---|---|
 | §1 溶解と過飽和 | 溶解度は §1.1 の表を補間(範囲外はファントホッフ 2400 K)、糖・エタノールの塩析係数つき。**CO₂ 収支(ボトル・液柱・溶存・気泡・泡層・大気・こぼれ)の合計は機械精度で保存** |
@@ -63,7 +65,7 @@ npm run calibrate   # 決まった注ぎ方を自動で実行し、タイム・�
 ### CI とリリース
 
 - **PR ごと**(`.github/workflows/ci.yml`): 全 JS ファイルの構文チェックと `npm test`。
-- **`v` で始まるタグの push**(`.github/workflows/release.yml`): `npm test` が通れば、`index.html`・`css/`・`js/` だけを GitHub Pages に公開します。
+- **`v` で始まるタグの push**(`.github/workflows/release.yml`): `npm test` が通れば、`index.html`・`physics.html`・`css/`・`js/` だけを GitHub Pages に公開します。
 
 タグを付ける前に CHANGELOG.md や package.json のバージョンをそろえる必要があるので、公開は [RELEASING.md](RELEASING.md) の手順で行います(初回に必要な GitHub の設定も載せています)。変更履歴は [CHANGELOG.md](CHANGELOG.md) にあります。
 
@@ -75,4 +77,5 @@ npm run calibrate   # 決まった注ぎ方を自動で実行し、タイム・�
 | `js/render.js` | Canvas でグラス・液・気泡・泡・液柱・ボトル・氷を描く |
 | `js/charts.js` | グラスの中身・流量のグラフと CO₂ 内訳 |
 | `js/main.js` | 入力・設定パネル・HUD・記録 |
+| `physics.html`・`css/physics.css` | 物理モデルと計算式の解説ページ(ゲームの右上の「物理モデル」から開く) |
 | `tools/` | 静的サーバー、校正スクリプト、テスト用の自動プレイヤー |
