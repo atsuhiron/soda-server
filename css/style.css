@@ -10,6 +10,8 @@
   --accent: #0f7f86;
   --accent-ink: #ffffff;
   --danger: #c23a32;
+  --thermo-red: #d23f33;
+  --thermo-tube: #ffffff;
   --grid: rgba(0, 0, 0, 0.07);
   --series-1: #2a78d6;
   --series-2: #eb6834;
@@ -39,6 +41,8 @@
     --accent: #3fb3b9;
     --accent-ink: #0b1a1b;
     --danger: #e66767;
+    --thermo-red: #e5584c;
+    --thermo-tube: #2c2c29;
     --grid: rgba(255, 255, 255, 0.08);
     --series-1: #3987e5;
     --series-2: #d95926;
@@ -66,6 +70,8 @@
   --accent: #3fb3b9;
   --accent-ink: #0b1a1b;
   --danger: #e66767;
+  --thermo-red: #e5584c;
+  --thermo-tube: #2c2c29;
   --grid: rgba(255, 255, 255, 0.08);
   --series-1: #3987e5;
   --series-2: #d95926;
@@ -600,6 +606,87 @@ select {
 }
 input[type='range'] {
   accent-color: var(--accent);
+}
+
+/* 液温・グラスの温度: アルコール温度計の形のスライダー。赤い液柱の先が今の値で、
+   つまみは液柱の先の細い印だけ。液柱と目盛りの位置は --p(0〜1)から同じ式で決める */
+.thermo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding-left: 12px;
+}
+.thermo-bulb {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.55), transparent 45%),
+    var(--thermo-red);
+  pointer-events: none;
+}
+input.thermo-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
+  background:
+    linear-gradient(var(--thermo-red), var(--thermo-red)) 0 50% / calc(8px + (100% - 16px) * var(--p, 0)) 4px no-repeat,
+    var(--thermo-tube);
+  cursor: pointer;
+}
+input.thermo-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  background: linear-gradient(to right, transparent 7px, var(--text-primary) 7px, var(--text-primary) 9px, transparent 9px);
+}
+input.thermo-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(to right, transparent 7px, var(--text-primary) 7px, var(--text-primary) 9px, transparent 9px);
+}
+input.thermo-input::-moz-range-track {
+  background: transparent;
+}
+.thermo-scale {
+  position: relative;
+  height: 18px;
+  margin: -2px 0 0 12px;
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.thermo-scale .tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 4px;
+  background: var(--text-secondary);
+}
+.thermo-scale .tick.major {
+  height: 6px;
+}
+.thermo-scale .tick-label {
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
 }
 .advanced {
   border-top: 1px solid var(--border);

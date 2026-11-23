@@ -47,6 +47,28 @@
   $('glass').value = P.DEFAULT_SETTINGS.glass;
   $('surface').value = P.DEFAULT_SETTINGS.surface;
 
+  // 温度計の形のスライダー(液温・グラスの温度)。液柱の長さと目盛りの位置は CSS と同じ
+  // 「8px + (幅 − 16px) × 割合」で置く(16px はつまみの幅)
+  const thermoPos = (p) => `calc(8px + (100% - 16px) * ${p})`;
+  for (const scale of document.querySelectorAll('.thermo-scale')) {
+    const inp = $(scale.dataset.for);
+    const min = +inp.min;
+    const max = +inp.max;
+    let html = '';
+    for (let v = min; v <= max; v += 5) {
+      const pos = thermoPos((v - min) / (max - min));
+      const major = v % 10 === 0;
+      html += `<span class="tick${major ? ' major' : ''}" style="left:${pos}"></span>`;
+      if (major) html += `<span class="tick-label" style="left:${pos}">${v}</span>`;
+    }
+    scale.innerHTML = html;
+  }
+  function thermoFill() {
+    for (const inp of document.querySelectorAll('.thermo-input')) {
+      inp.style.setProperty('--p', String((inp.value - inp.min) / (inp.max - inp.min)));
+    }
+  }
+
   // 対数スライダー(0〜100 → min〜max)
   const logMap = (min, max) => ({
     to: (v) => min * Math.pow(max / min, v / 100),
@@ -82,6 +104,7 @@
   }
 
   function updateOutputs(s, sim) {
+    thermoFill();
     $('liquidTempOut').textContent = `${s.liquidTemp} ℃`;
     $('glassTempOut').textContent = `${s.glassTemp} ℃`;
     $('iceOut').textContent = s.ice ? `${s.ice} 個` : 'なし';

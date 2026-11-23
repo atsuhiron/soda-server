@@ -123,7 +123,11 @@
               </label>
               <label class="field">
                 <span>液温 <output id="liquidTempOut"></output></span>
-                <input type="range" id="liquidTemp" min="0" max="35" step="1" value="5" />
+                <div class="thermo">
+                  <span class="thermo-bulb" aria-hidden="true"></span>
+                  <input type="range" class="thermo-input" id="liquidTemp" min="0" max="35" step="1" value="5" />
+                </div>
+                <div class="thermo-scale" data-for="liquidTemp" aria-hidden="true"></div>
               </label>
               <label class="field">
                 <span>グラス</span>
@@ -131,7 +135,11 @@
               </label>
               <label class="field">
                 <span>グラスの温度 <output id="glassTempOut"></output></span>
-                <input type="range" id="glassTemp" min="0" max="45" step="1" value="20" />
+                <div class="thermo">
+                  <span class="thermo-bulb" aria-hidden="true"></span>
+                  <input type="range" class="thermo-input" id="glassTemp" min="0" max="45" step="1" value="20" />
+                </div>
+                <div class="thermo-scale" data-for="glassTemp" aria-hidden="true"></div>
               </label>
               <label class="field">
                 <span>グラスの表面</span>
