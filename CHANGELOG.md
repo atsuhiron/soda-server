@@ -6,6 +6,8 @@
 
 ## [未リリース]
 
+## [1.0.0] - 2026-11-23
+
 ### 追加
 
 - 計算に使っている物理モデルと計算式の解説ページ(physics.html)を追加。ゲームの右上の「遊び方」の隣の「物理モデル」から開く (#6)
@@ -35,5 +37,6 @@
 - `v*` タグの push で GitHub Pages に公開するワークフロー (#2)
 - 変更履歴(この CHANGELOG.md)とリリース手順 RELEASING.md (#3)
 
-[未リリース]: https://github.com/atsuhiron/soda-server/compare/v0.1.0...main
+[未リリース]: https://github.com/atsuhiron/soda-server/compare/v1.0.0...main
+[1.0.0]: https://github.com/atsuhiron/soda-server/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/atsuhiron/soda-server/releases/tag/v0.1.0
