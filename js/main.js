@@ -63,8 +63,9 @@
     }
     scale.innerHTML = html;
   }
+  // 自分で塗りを描くスライダー(温度計と氷)の塗りの割合 --p を値に合わせる
   function thermoFill() {
-    for (const inp of document.querySelectorAll('.thermo-input')) {
+    for (const inp of document.querySelectorAll('.thermo-input, #ice')) {
       inp.style.setProperty('--p', String((inp.value - inp.min) / (inp.max - inp.min)));
     }
   }
