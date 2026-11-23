@@ -1,8 +1,9 @@
 /*
  * Soda Server — 画面の組み立てと入力
- * マウス/タッチを押している間だけボトルとグラスを持つ:
- *   上下 → ボトルの傾き(液が口に届く角度を基準に、上ほど深く傾ける)
- *   左右 → グラスの傾き(右ほどボトル側へ。壁を伝わせられる)
+ * マウス/タッチを押している間だけボトルとグラスを持つ。傾きは押している位置で決まり、
+ * 画面にはその対応をグラフの目盛りとして描く(CONTROL_MAP):
+ *   縦 → ボトルの傾き(液が口に届く角度を基準に、上ほど深く傾ける)
+ *   横 → グラスの傾き(右ほどボトル側へ。壁を伝わせられる)
  *   ホイール → 注ぎ口の高さ
  */
 (function () {
@@ -10,6 +11,19 @@
   const P = window.SodaPhysics;
   const $ = (id) => document.getElementById(id);
   const clamp = P.clamp;
+
+  // 押した位置(画面の左端・下端を 0、右端・上端を 1)→ 傾き [°]。
+  // 縦: 液が口に届く角度(残量で変わる)の 14° 手前 〜 27° 先。下から 1/3 あたりで出始め、
+  //     上 1/5 ほどでゴボゴボ言う全開になる。
+  // 横: 左 15% は立てたまま、そこから 80% までで 0 → 60°、その先は 60° のまま。
+  const RAD = 180 / Math.PI;
+  const CONTROL_MAP = {
+    GLASS_MAX_DEG: Math.round(P.MAX_GLASS_TILT * RAD), // 60(そのままだと 59.999… になる)
+    bottleDeg: (uy) => (uy * 0.72 - 0.25) * RAD,
+    uyAtBottleDeg: (d) => (d / RAD + 0.25) / 0.72,
+    glassDeg: (ux) => P.MAX_GLASS_TILT * RAD * clamp((ux - 0.15) / 0.65, 0, 1),
+    uxAtGlassDeg: (d) => 0.15 + (0.65 * d) / (P.MAX_GLASS_TILT * RAD),
+  };
 
   // ---------- 保存(このブラウザだけ) ----------
   const store = {
@@ -137,6 +151,7 @@
   let settings = readSettings();
   const game = new P.Game(settings);
   const renderer = new window.SceneRenderer($('scene'));
+  const axes = new window.ControlAxes($('axes'), $('stage'), CONTROL_MAP);
   const charts = new window.HistoryCharts($('chartVol'), $('chartFlow'), $('chartTip'));
   const budget = new window.BudgetBar($('budgetBar'), $('budgetLegend'));
   updateOutputs(settings, game.sim);
@@ -189,8 +204,19 @@
   $('speed').addEventListener('change', () => (speed = +$('speed').value));
 
   // ---------- 入力 ----------
-  const input = { active: false, ux: 0.3, uy: 0.5, mouth: 0.015, key: false };
+  // hover: マウスが画面の上にある(押す前でも、押したらどの傾きになるかを十字線で見せる)
+  const input = { active: false, hover: false, ux: 0.3, uy: 0.5, mouth: 0.015, key: false };
   const canvas = $('scene');
+  // 傾きの札を出すときに避ける、画面に重ねた表示の枠(キャンバス上の px)
+  const overlays = [...document.querySelectorAll('.stage .hud')];
+  const avoid = () => {
+    const r = canvas.getBoundingClientRect();
+    return overlays.map((el) => {
+      const b = el.getBoundingClientRect();
+      return { x0: b.left - r.left - 4, x1: b.right - r.left + 4, y0: b.top - r.top - 4, y1: b.bottom - r.top + 4 };
+    });
+  };
+  renderer.ctrl = { map: CONTROL_MAP, input, avoid };
   function setPos(e) {
     const r = canvas.getBoundingClientRect();
     input.ux = clamp((e.clientX - r.left) / r.width, 0, 1);
@@ -210,8 +236,10 @@
     e.preventDefault();
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (input.active) setPos(e);
+    if (e.pointerType === 'mouse') input.hover = true;
+    if (input.active || e.pointerType === 'mouse') setPos(e);
   });
+  canvas.addEventListener('pointerleave', () => (input.hover = false));
   const release = () => {
     input.active = false;
     canvas.classList.remove('holding');
@@ -260,11 +288,8 @@
   function controls() {
     const sim = game.sim;
     if (!input.active) return { bottleTilt: 0, glassTilt: 0, mouthHeight: input.mouth };
-    // 液が口に届く角度(残量で変わる)の 14° 手前 〜 27° 先を画面の下端〜上端に割り当てる。
-    // 下から 1/3 あたりで出始め、上 1/5 ほどでゴボゴボ言う全開になる。
-    const bottleTilt = sim.onsetTilt() - 0.25 + input.uy * 0.72;
-    const gx = clamp((input.ux - 0.15) / 0.65, 0, 1);
-    return { bottleTilt, glassTilt: P.MAX_GLASS_TILT * gx, mouthHeight: input.mouth };
+    const bottleTilt = sim.onsetTilt() + CONTROL_MAP.bottleDeg(input.uy) / RAD;
+    return { bottleTilt, glassTilt: CONTROL_MAP.glassDeg(input.ux) / RAD, mouthHeight: input.mouth };
   }
 
   // ---------- 記録 ----------
@@ -350,11 +375,17 @@
   // ---------- ループ ----------
   function resize() {
     renderer.resize();
+    axes.draw();
     charts.resize();
   }
   window.addEventListener('resize', resize);
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  if (mq.addEventListener) mq.addEventListener('change', () => renderer.readTheme());
+  if (mq.addEventListener) {
+    mq.addEventListener('change', () => {
+      renderer.readTheme();
+      axes.draw();
+    });
+  }
   resize();
   updateHud();
 

@@ -308,6 +308,16 @@
     },
   };
 
+  // 操作のグラフの目盛り(10° ごと)。縦はボトル(注ぎ始めからの差)、横はグラス
+  function controlTicks(m) {
+    const ys = [];
+    for (let d = Math.ceil(m.bottleDeg(0) / 10) * 10; d <= m.bottleDeg(1); d += 10) ys.push(d);
+    const xs = [];
+    for (let d = 0; d <= m.GLASS_MAX_DEG; d += 10) xs.push(d);
+    return { ys, xs };
+  }
+  const fmtDeg = (d) => (d > 0 ? `+${d}°` : d < 0 ? `−${-d}°` : '0°');
+
   class SceneRenderer {
     constructor(canvas) {
       this.canvas = canvas;
@@ -334,7 +344,10 @@
         tableTop: v('--table-top', '#c39a6b'),
         tableFront: v('--table-front', '#8f6643'),
         ink: v('--text-secondary', '#52514e'),
-        tile: v('--scene-tile', 'rgba(0,0,0,0.035)'),
+        grid: v('--scene-grid', 'rgba(0,0,0,0.12)'),
+        accent: v('--accent', '#0f7f86'),
+        accentInk: v('--accent-ink', '#ffffff'),
+        label: v('--hud-bg', 'rgba(255,255,255,0.78)'),
       };
     }
 
@@ -425,6 +438,7 @@
       this.screen();
       c.clearRect(0, 0, this.W, this.H);
       this.drawBackground(sim);
+      this.drawControlGrid();
       this.consumeSpill(sim, dt);
       this.drawPuddle(sim);
       this.drawGlassBody(sim);
@@ -435,6 +449,167 @@
       this.drawBottle(sim);
       this.drawParticles(sim, dt);
       this.screen();
+      this.drawPointer();
+    }
+
+    // ---------- 操作のグラフ ----------
+    // ゲームの枠全体を「押した位置 → 傾き」のグラフとして見せる。縦軸はボトルの傾き(液が注ぎ口に
+    // 届く角度からの差)、横軸はグラスの傾き。対応は main.js の CONTROL_MAP が決め、
+    // this.ctrl = { map, input, avoid } で渡される。目盛りラベルは枠の外の ControlAxes が描く。
+    py(uy) {
+      return (1 - uy) * this.H;
+    }
+
+    drawControlGrid() {
+      if (!this.ctrl) return;
+      const c = this.ctx;
+      const t = this.theme;
+      const m = this.ctrl.map;
+      const { ys, xs } = controlTicks(m);
+      // グラスの傾きが変わらない範囲(左は立てたまま、右は最大のまま)を薄く塗る
+      const xa = m.uxAtGlassDeg(0) * this.W;
+      const xb = m.uxAtGlassDeg(m.GLASS_MAX_DEG) * this.W;
+      c.fillStyle = t.grid;
+      c.globalAlpha = 0.3;
+      c.fillRect(0, 0, xa, this.H);
+      c.fillRect(xb, 0, this.W - xb, this.H);
+      c.globalAlpha = 1;
+      c.strokeStyle = t.grid;
+      c.lineWidth = 1;
+      c.beginPath();
+      for (const d of xs) {
+        const x = Math.round(m.uxAtGlassDeg(d) * this.W) + 0.5;
+        c.moveTo(x, 0);
+        c.lineTo(x, this.H);
+      }
+      for (const d of ys) {
+        if (d === 0) continue;
+        const y = Math.round(this.py(m.uyAtBottleDeg(d))) + 0.5;
+        c.moveTo(0, y);
+        c.lineTo(this.W, y);
+      }
+      c.stroke();
+      // 0°(液が出始める傾き)の線だけ濃い破線にする
+      const y0 = Math.round(this.py(m.uyAtBottleDeg(0))) + 0.5;
+      c.strokeStyle = t.ink;
+      c.globalAlpha = 0.5;
+      c.setLineDash([6, 4]);
+      c.beginPath();
+      c.moveTo(0, y0);
+      c.lineTo(this.W, y0);
+      c.stroke();
+      c.setLineDash([]);
+      c.globalAlpha = 1;
+    }
+
+    setFont(px, weight) {
+      this.ctx.font = `${weight} ${px}px system-ui, sans-serif`;
+    }
+
+    // 押している位置(マウスなら押す前の位置も)を十字線で示し、その時の傾きをカーソルのそばに出す
+    drawPointer() {
+      if (!this.ctrl) return;
+      const { map: m, input } = this.ctrl;
+      if (!input.active && !input.hover) return;
+      const c = this.ctx;
+      const t = this.theme;
+      const x = input.ux * this.W;
+      const y = this.py(input.uy);
+      c.strokeStyle = t.accent;
+      c.lineWidth = input.active ? 1.5 : 1;
+      c.globalAlpha = input.active ? 0.9 : 0.55;
+      if (!input.active) c.setLineDash([4, 4]);
+      c.beginPath();
+      c.moveTo(0, Math.round(y) + 0.5);
+      c.lineTo(this.W, Math.round(y) + 0.5);
+      c.moveTo(Math.round(x) + 0.5, 0);
+      c.lineTo(Math.round(x) + 0.5, this.H);
+      c.stroke();
+      c.setLineDash([]);
+      c.globalAlpha = 1;
+      c.fillStyle = t.accent;
+      c.beginPath();
+      c.arc(x, y, input.active ? 4.5 : 3.5, 0, TAU);
+      c.fill();
+      this.drawReadout(x, y, [
+        ['ボトル', fmtDeg(Math.round(m.bottleDeg(input.uy))), 'v'],
+        ['グラス', `${Math.round(m.glassDeg(input.ux))}°`, 'h'],
+      ]);
+    }
+
+    // カーソルのそばに今の傾きを小さな札で出す。指で押しても隠れないよう右上を優先し、
+    // はみ出すときや画面に重ねた表示(this.ctrl.avoid() が返す枠)に隠れるときは左上・右下・左下へ
+    drawReadout(x, y, rows) {
+      const c = this.ctx;
+      const t = this.theme;
+      const pad = 8;
+      const rowH = 20;
+      this.setFont(12, 600);
+      const icon = 10; // 名前の後ろの両向き矢印の大きさ
+      const lw = Math.max(...rows.map((r) => c.measureText(r[0]).width)) + 5 + icon;
+      this.setFont(15, 700);
+      const vw = Math.max(...rows.map((r) => c.measureText(r[1]).width));
+      const w = pad * 2 + lw + 10 + vw;
+      const h = pad * 2 + rowH * rows.length - 4;
+      const gap = 16;
+      const avoid = this.ctrl.avoid ? this.ctrl.avoid() : [];
+      const spots = [
+        [x + gap, y - gap - h],
+        [x - gap - w, y - gap - h],
+        [x + gap, y + gap],
+        [x - gap - w, y + gap],
+      ];
+      const fits = ([a, b]) =>
+        a >= 4 && b >= 4 && a + w <= this.W - 4 && b + h <= this.H - 4 &&
+        !avoid.some((r) => a < r.x1 && a + w > r.x0 && b < r.y1 && b + h > r.y0);
+      const [x0, y0] = spots.find(fits) || spots[0];
+      c.fillStyle = t.label;
+      c.strokeStyle = t.accent;
+      c.lineWidth = 1.5;
+      c.beginPath();
+      if (c.roundRect) c.roundRect(x0, y0, w, h, 8);
+      else c.rect(x0, y0, w, h);
+      c.fill();
+      c.stroke();
+      c.textBaseline = 'middle';
+      rows.forEach(([label, value, dir], i) => {
+        const ym = y0 + pad + rowH * i + (rowH - 4) / 2 + 0.5;
+        this.setFont(12, 600);
+        c.fillStyle = t.ink;
+        c.textAlign = 'left';
+        c.fillText(label, x0 + pad, ym);
+        this.drawDoubleArrow(x0 + pad + c.measureText(label).width + 5 + icon / 2, ym, icon, dir, t.ink);
+        this.setFont(15, 700);
+        c.fillStyle = t.accent;
+        c.textAlign = 'right';
+        c.fillText(value, x0 + w - pad, ym);
+      });
+      c.textAlign = 'left';
+    }
+
+    // 両向きの矢印(dir: 'v' は上下、'h' は左右)。文字の ↕ ↔ は字体によって形が崩れるので図形で描く
+    drawDoubleArrow(cx, cy, size, dir, color) {
+      const c = this.ctx;
+      const r = size / 2;
+      const head = 3.2;
+      c.save();
+      c.translate(cx, cy);
+      if (dir === 'h') c.rotate(Math.PI / 2);
+      c.strokeStyle = color;
+      c.lineWidth = 1.5;
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      c.beginPath();
+      c.moveTo(0, -r);
+      c.lineTo(0, r);
+      c.moveTo(-head, -r + head);
+      c.lineTo(0, -r);
+      c.lineTo(head, -r + head);
+      c.moveTo(-head, r - head);
+      c.lineTo(0, r);
+      c.lineTo(head, r - head);
+      c.stroke();
+      c.restore();
     }
 
     drawBackground(sim) {
@@ -446,20 +621,6 @@
       g.addColorStop(1, t.wallBottom);
       c.fillStyle = g;
       c.fillRect(0, 0, this.W, ty);
-      // タイル目地
-      c.strokeStyle = t.tile;
-      c.lineWidth = 1;
-      const step = Math.max(28, this.s * 0.05);
-      c.beginPath();
-      for (let y = ty - step; y > 0; y -= step) {
-        c.moveTo(0, y);
-        c.lineTo(this.W, y);
-      }
-      for (let x = (this.X(0) % step) - step; x < this.W; x += step) {
-        c.moveTo(x, 0);
-        c.lineTo(x, ty);
-      }
-      c.stroke();
       // テーブル
       const depth = Math.max(10, this.s * 0.018);
       c.fillStyle = t.tableTop;
@@ -920,5 +1081,59 @@
     }
   }
 
+  // ゲームの枠の外(左と下の余白)に、操作のグラフの目盛りラベルと軸名を描く。
+  // 目盛りは変わらないので、大きさやテーマが変わったときだけ描き直す
+  class ControlAxes {
+    constructor(canvas, frame, map) {
+      this.canvas = canvas;
+      this.frame = frame;
+      this.map = map;
+      this.ctx = canvas.getContext('2d');
+    }
+
+    draw() {
+      const cv = this.canvas;
+      const r = cv.getBoundingClientRect();
+      const f = this.frame.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = Math.round(r.width * dpr);
+      cv.height = Math.round(r.height * dpr);
+      const c = this.ctx;
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      c.clearRect(0, 0, r.width, r.height);
+      // 枠の位置(この canvas の中の px)
+      const fx = f.left - r.left;
+      const fy = f.top - r.top;
+      const fw = f.width;
+      const fh = f.height;
+      const m = this.map;
+      const { ys, xs } = controlTicks(m);
+      const cs = getComputedStyle(document.documentElement);
+      const ink = (cs.getPropertyValue('--text-secondary') || '').trim() || '#52514e';
+      const tick = fw < 500 ? 12 : 14; // 狭い画面では少し小さく
+      c.fillStyle = ink;
+      // 縦軸: 目盛りラベルは枠の左に右揃え、軸名はその左に縦書きで枠の高さの中央
+      c.font = `600 ${tick}px system-ui, sans-serif`;
+      c.textAlign = 'right';
+      c.textBaseline = 'middle';
+      for (const d of ys) c.fillText(fmtDeg(d), fx - 6, fy + (1 - m.uyAtBottleDeg(d)) * fh);
+      c.font = '600 12px system-ui, sans-serif';
+      c.textAlign = 'center';
+      c.save();
+      c.translate(8, fy + fh / 2);
+      c.rotate(-Math.PI / 2);
+      c.fillText('ボトルの傾き →', 0, 0);
+      c.restore();
+      // 横軸: 目盛りラベルは枠の下、軸名はその下で枠の幅の中央
+      c.font = `600 ${tick}px system-ui, sans-serif`;
+      c.textBaseline = 'top';
+      for (const d of xs) c.fillText(`${d}°`, fx + m.uxAtGlassDeg(d) * fw, fy + fh + 5);
+      c.font = '600 12px system-ui, sans-serif';
+      c.textBaseline = 'bottom';
+      c.fillText('グラスの傾き →', fx + fw / 2, r.height - 2);
+    }
+  }
+
   window.SceneRenderer = SceneRenderer;
+  window.ControlAxes = ControlAxes;
 })();

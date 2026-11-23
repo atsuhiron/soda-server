@@ -24,7 +24,7 @@
         </div>
         <ul>
           <li><b>押したまま(ドラッグ)</b>でボトルとグラスを持ちます。離すと両方とも元に戻ります。</li>
-          <li><b>上下</b>: ボトルの傾き(上ほど勢いよく注ぐ)。<b>左右</b>: グラスの傾き(右ほどボトル側へ傾く)。</li>
+          <li>傾きは<b>押している位置</b>で決まり、画面の目盛りのとおりになります。<b>縦軸</b>: ボトルの傾き(0° の破線より上で出る)。<b>横軸</b>: グラスの傾き(右ほどボトル側へ傾く)。</li>
           <li><b>ホイール</b>(または右のスライダー): 注ぎ口の高さ。高いほど液柱が速く突っ込み、空気を巻き込みます。</li>
           <li>液体が<b>目標線</b>に届いた時点でタイム確定。泡が落ち着くまで見届けて、こぼれた量を集計します。</li>
           <li>記録 = タイム + こぼした液 1 mL ごとに <b>0.5 秒</b>。キーボード: R でやり直し、Space で押したまま、矢印で操作。</li>
@@ -34,49 +34,50 @@
 
     <main class="layout">
       <section class="stage-col">
-        <div class="stage" id="stage">
-          <canvas id="scene" aria-label="グラスとボトルの様子" role="img"></canvas>
+        <div class="plot">
+          <canvas class="axes" id="axes" aria-hidden="true"></canvas>
+          <div class="stage" id="stage">
+            <canvas id="scene" aria-label="グラスとボトルの様子" role="img"></canvas>
 
-          <div class="hud hud-left" aria-live="off">
-            <div class="timer"><span id="hudTime">0.00</span><small>秒</small></div>
-            <div class="fill">
-              <div class="fill-bar"><span id="hudFillBar"></span></div>
-              <div class="fill-text">液体 <b id="hudLiquid">0</b> / <span id="hudTarget">0</span> mL</div>
-            </div>
-            <dl class="mini">
-              <div><dt>泡の厚さ</dt><dd><b id="hudFoam">0</b> mm</dd></div>
-              <div><dt>こぼれ</dt><dd><b id="hudSpill">0.0</b> mL</dd></div>
-            </dl>
-          </div>
-
-          <dl class="hud hud-right mini">
-            <div><dt>流量</dt><dd><b id="hudQ">0</b> mL/s</dd></div>
-            <div><dt>突入速度</dt><dd><b id="hudV">—</b> <span id="hudMode"></span></dd></div>
-            <div><dt>過飽和度 S</dt><dd><b id="hudS">—</b></dd></div>
-            <div><dt>液温 / グラス</dt><dd><b id="hudTL">—</b> / <b id="hudTg">—</b> ℃</dd></div>
-            <div><dt>ボトル残り</dt><dd><b id="hudBottle">500</b> mL</dd></div>
-          </dl>
-
-          <div class="guide guide-x" aria-hidden="true">← グラスを起こす ・ ボトル側へ傾ける →</div>
-          <div class="guide guide-y" aria-hidden="true">↑ 勢いよく注ぐ</div>
-
-          <div class="hint" id="hint">
-            <p><b>上にドラッグすると</b>注ぎ始めます</p>
-            <p class="sub">左右でグラスを傾け、壁を伝わせると泡が減ります</p>
-          </div>
-
-          <div class="result" id="result" hidden>
-            <div class="result-card" role="dialog" aria-labelledby="resultTitle">
-              <h2 id="resultTitle">クリア</h2>
-              <p class="record"><span id="resRecord">0.00</span><small>秒</small></p>
-              <p class="best" id="resBest"></p>
-              <dl>
-                <div><dt>タイム</dt><dd id="resTime">0.00 秒</dd></div>
-                <div><dt>こぼした量</dt><dd id="resSpill">0.0 mL</dd></div>
-                <div><dt>ペナルティ</dt><dd id="resPenalty">+0.00 秒</dd></div>
-                <div><dt>泡の最大の厚さ</dt><dd id="resFoam">0 mm</dd></div>
+            <div class="hud hud-left" aria-live="off">
+              <div class="timer"><span id="hudTime">0.00</span><small>秒</small></div>
+              <div class="fill">
+                <div class="fill-bar"><span id="hudFillBar"></span></div>
+                <div class="fill-text">液体 <b id="hudLiquid">0</b> / <span id="hudTarget">0</span> mL</div>
+              </div>
+              <dl class="mini">
+                <div><dt>泡の厚さ</dt><dd><b id="hudFoam">0</b> mm</dd></div>
+                <div><dt>こぼれ</dt><dd><b id="hudSpill">0.0</b> mL</dd></div>
               </dl>
-              <button type="button" class="btn primary" id="againBtn">もう一度(R)</button>
+            </div>
+
+            <dl class="hud hud-right mini">
+              <div><dt>流量</dt><dd><b id="hudQ">0</b> mL/s</dd></div>
+              <div><dt>突入速度</dt><dd><b id="hudV">—</b> <span id="hudMode"></span></dd></div>
+              <div><dt>過飽和度 S</dt><dd><b id="hudS">—</b></dd></div>
+              <div><dt>液温 / グラス</dt><dd><b id="hudTL">—</b> / <b id="hudTg">—</b> ℃</dd></div>
+              <div><dt>ボトル残り</dt><dd><b id="hudBottle">500</b> mL</dd></div>
+            </dl>
+
+
+            <div class="hint" id="hint">
+              <p><b>上下</b>でボトルを傾ける</p>
+              <p><b>左右</b>でグラスを傾ける</p>
+            </div>
+
+            <div class="result" id="result" hidden>
+              <div class="result-card" role="dialog" aria-labelledby="resultTitle">
+                <h2 id="resultTitle">クリア</h2>
+                <p class="record"><span id="resRecord">0.00</span><small>秒</small></p>
+                <p class="best" id="resBest"></p>
+                <dl>
+                  <div><dt>タイム</dt><dd id="resTime">0.00 秒</dd></div>
+                  <div><dt>こぼした量</dt><dd id="resSpill">0.0 mL</dd></div>
+                  <div><dt>ペナルティ</dt><dd id="resPenalty">+0.00 秒</dd></div>
+                  <div><dt>泡の最大の厚さ</dt><dd id="resFoam">0 mm</dd></div>
+                </dl>
+                <button type="button" class="btn primary" id="againBtn">もう一度(R)</button>
+              </div>
             </div>
           </div>
         </div>
