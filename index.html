@@ -197,7 +197,17 @@
           <h2 id="secRecords">記録</h2>
           <div class="panel-body">
             <p class="best-line" id="bestLine">この条件のベスト: —</p>
-            <ol class="recent" id="recent"></ol>
+            <table class="recent">
+              <caption>最近の記録(新しい順)</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="num">記録 <small>秒</small></th>
+                  <th scope="col">条件</th>
+                  <th scope="col" class="num">こぼれ <small>mL</small></th>
+                </tr>
+              </thead>
+              <tbody id="recent"></tbody>
+            </table>
           </div>
         </section>
       </aside>

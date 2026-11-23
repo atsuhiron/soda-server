@@ -252,9 +252,15 @@
       ? `この条件のベスト: <b>${best.record.toFixed(2)} 秒</b>(こぼれ ${best.spill.toFixed(1)} mL)`
       : 'この条件のベスト: —';
     const recent = store.get(RECENT_KEY, []);
-    $('recent').innerHTML = recent
-      .map((r) => `<li><b>${r.ok ? `${r.record.toFixed(2)} 秒` : '失敗'}</b> ${r.label}${r.ok ? `(こぼれ ${r.spill.toFixed(1)} mL)` : ''}</li>`)
-      .join('');
+    $('recent').innerHTML = recent.length
+      ? recent
+          .map(
+            (r) =>
+              `<tr${r.ok ? '' : ' class="failed"'}><td class="num">${r.ok ? r.record.toFixed(2) : '失敗'}</td>` +
+              `<td>${r.label}</td><td class="num">${r.spill.toFixed(1)}</td></tr>`,
+          )
+          .join('')
+      : '<tr><td colspan="3" class="empty">まだ記録はありません</td></tr>';
   }
   showRecords();
 
