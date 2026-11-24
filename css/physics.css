@@ -69,6 +69,45 @@
 .toc a {
   text-decoration: none;
 }
+/* 付録は番号なしで、本編の下に横に並べる */
+.toc .toc-app {
+  margin: 8px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 20px;
+  font-size: 13px;
+}
+
+/* 組み立ての流れの表: 段階の番号を目立たせる */
+.doc table.roadmap th:first-child,
+.doc table.roadmap td.n {
+  width: 3em;
+  text-align: center;
+}
+.doc table.roadmap td.n {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* 各段階の終わり: わかったことと、次の段階で足すもの */
+.recap {
+  margin: 16px 0 4px;
+  padding: 10px 14px;
+  background: var(--surface-1);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.recap p {
+  margin: 2px 0;
+}
+.recap b {
+  color: var(--text-primary);
+}
 .toc a:hover {
   text-decoration: underline;
 }
