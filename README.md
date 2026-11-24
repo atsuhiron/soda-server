@@ -4,7 +4,7 @@ Please serve the soda—but be careful not to spill it.
 炭酸飲料を **なるべく速く、でもこぼさずに** コップへ注ぐブラウザゲームです。
 泡の立ち方は [soda_foam_physics_report.md](soda_foam_physics_report.md) の物理モデル(§9 の L1 モデル)をリアルタイムで解いて決めています。
 
-**遊ぶ: https://atsuhiron.github.io/soda-server/**(GitHub Pages で公開している最新のリリース版)
+**遊ぶ: [atsuhiron.github.io/soda-server](https://atsuhiron.github.io/soda-server/)**(GitHub Pages で公開している最新のリリース版)
 
 ## 起動
 
