@@ -202,8 +202,8 @@
 
   // 流量グラフの縦軸の初期範囲 [mL/s]。泡は壊れると減るので負の側も最初から見せる。
   // はみ出したら、両端が目盛りに乗るように広げる
-  const FLOW_MIN = -20;
-  const FLOW_MAX = 100;
+  const FLOW_MIN = -10;
+  const FLOW_MAX = 50;
 
   class HistoryCharts {
     constructor(volCanvas, flowCanvas, tooltip) {
@@ -225,7 +225,7 @@
         refs: [],
         yMin: FLOW_MIN,
         yMax: FLOW_MAX,
-        yStep: 20,
+        yStep: 10,
         unit: 'mL/s',
       });
       this.tooltip = tooltip;
