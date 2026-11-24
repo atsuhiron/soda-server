@@ -6,6 +6,8 @@
 
 ## [未リリース]
 
+## [1.0.1] - 2026-11-24
+
 ### 変更
 
 - 物理モデルの解説ページを、液面と泡の上面の高さを求めるという目的に沿って組み立て直した。円筒に一定の流量で注ぐ解析解から始め、グラスの形、ボトルの流量、泡の層、空気の巻き込み、溶けている CO₂、液中の気泡、泡の膜、温度と氷の順に 1 段ずつ足していく構成にし、各段階の終わりに「わかること」と「足りないもの」を置いた (#10)
@@ -44,6 +46,7 @@
 - `v*` タグの push で GitHub Pages に公開するワークフロー (#2)
 - 変更履歴(この CHANGELOG.md)とリリース手順 RELEASING.md (#3)
 
-[未リリース]: https://github.com/atsuhiron/soda-server/compare/v1.0.0...main
+[未リリース]: https://github.com/atsuhiron/soda-server/compare/v1.0.1...main
+[1.0.1]: https://github.com/atsuhiron/soda-server/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/atsuhiron/soda-server/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/atsuhiron/soda-server/releases/tag/v0.1.0
