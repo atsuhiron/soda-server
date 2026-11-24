@@ -107,9 +107,11 @@ body {
 
 .topbar {
   display: flex;
+  /* 狭い画面では、タイトルを詰めずにボタンを次の行へ送る */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px 16px;
   max-width: 1320px;
   margin: 0 auto;
   padding: 18px 20px 10px;

@@ -4,9 +4,11 @@ Please serve the soda—but be careful not to spill it.
 炭酸飲料を **なるべく速く、でもこぼさずに** コップへ注ぐブラウザゲームです。
 泡の立ち方は [soda_foam_physics_report.md](soda_foam_physics_report.md) の物理モデル(§9 の L1 モデル)をリアルタイムで解いて決めています。
 
+**遊ぶ: https://atsuhiron.github.io/soda-server/**(GitHub Pages で公開している最新のリリース版)
+
 ## 起動
 
-ビルドも依存パッケージも不要です。
+ブラウザで遊ぶだけなら、上の GitHub Pages を開けば十分です。手元で動かす場合も、ビルドや依存パッケージは要りません。
 
 - `index.html` をブラウザで直接開く、または
 - `npm start`(= `node tools/serve.js 8080`)を実行して http://localhost:8080/ を開く
@@ -32,7 +34,7 @@ Please serve the soda—but be careful not to spill it.
 
 ## 物理モデル(js/physics.js)
 
-計算式の詳しい解説は [physics.html](physics.html)(ゲームの右上の「物理モデル」)にあります。
+計算式の詳しい解説は [physics.html](physics.html)(ゲームの右上の「物理モデルの解説」)にあります。
 
 | 報告書 | 実装 |
 |---|---|
@@ -77,5 +79,5 @@ npm run calibrate   # 決まった注ぎ方を自動で実行し、タイム・�
 | `js/render.js` | Canvas でグラス・液・気泡・泡・液柱・ボトル・氷を描く |
 | `js/charts.js` | グラスの中身・流量のグラフと CO₂ 内訳 |
 | `js/main.js` | 入力・設定パネル・HUD・記録 |
-| `physics.html`・`css/physics.css` | 物理モデルと計算式の解説ページ(ゲームの右上の「物理モデル」から開く) |
+| `physics.html`・`css/physics.css` | 物理モデルと計算式の解説ページ(ゲームの右上の「物理モデルの解説」から開く) |
 | `tools/` | 静的サーバー、校正スクリプト、テスト用の自動プレイヤー |
